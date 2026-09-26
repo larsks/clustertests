@@ -2,8 +2,9 @@ package cluster_tests
 
 import (
 	"context"
+	"fmt"
 
-	//. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -22,49 +23,69 @@ var (
 
 // deploymentIsAvailable reports whether the specified deployment has an Available=True condition.
 func deploymentIsAvailable(deployment *v1.Deployment) {
+	GinkgoHelper()
+	var available bool
 	for _, condition := range deployment.Status.Conditions {
 		if condition.Type == appsv1.DeploymentAvailable {
-			Expect(condition.Status).To(Equal(corev1.ConditionTrue))
+			Expect(condition.Status).
+				To(Equal(corev1.ConditionTrue), "deployment %q is not available", deployment.Name)
+			available = true
+			break
 		}
 	}
+
+	if !available {
+		Fail(fmt.Sprintf("deployment %q has no Available condition", deployment.Name))
+	}
+
+	Expect(deployment.Status.ObservedGeneration).To(
+		BeNumerically(">=", deployment.Generation),
+	)
+	Expect(deployment.Spec.Replicas).ToNot(BeNil())
+	desired := *deployment.Spec.Replicas
+	Expect(deployment.Status.AvailableReplicas).To(Equal(desired))
+	Expect(deployment.Status.UpdatedReplicas).To(Equal(desired))
 }
 
-func deploymentsAreAvailable(ctx context.Context, namespace string, deploymentNames []string) {
-	for _, deploymentName := range deploymentNames {
-		deployment, err := coreClient.AppsV1().Deployments(namespace).Get(ctx, deploymentName, metav1.GetOptions{})
+func deploymentIsAvailableByName(ctx context.Context, namespace, name string) {
+	GinkgoHelper()
+	deployment, err := coreClient.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+	Expect(err).NotTo(HaveOccurred())
+	deploymentIsAvailable(deployment)
+}
+
+func deploymentsAreAvailable(ctx context.Context, namespace string, names []string) {
+	GinkgoHelper()
+	for _, name := range names {
+		deployment, err := coreClient.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
 		Expect(err).NotTo(HaveOccurred())
 		deploymentIsAvailable(deployment)
 	}
 }
 
-func daemonsetIsAvailable(ctx context.Context, daemonset *appsv1.DaemonSet) bool {
+func daemonsetIsAvailable(ctx context.Context, daemonset *appsv1.DaemonSet) {
+	GinkgoHelper()
 	selector := labels.Set(daemonset.Spec.Template.Spec.NodeSelector).AsSelector()
 	nodes, err := coreClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{LabelSelector: selector.String()})
-	if err != nil {
-		return false
-	}
+	Expect(err).NotTo(HaveOccurred())
 	expected := len(nodes.Items)
 
-	if daemonset.Status.NumberAvailable != daemonset.Status.DesiredNumberScheduled {
-		return false
-	}
-
-	if int(daemonset.Status.NumberAvailable) != expected {
-		return false
-	}
-
-	return true
+	Expect(daemonset.Status.NumberAvailable).To(Equal(daemonset.Status.DesiredNumberScheduled))
+	Expect(daemonset.Status.NumberAvailable).To(BeNumerically("==", expected))
 }
 
-func daemonsetsAreAvailable(ctx context.Context, namespace string, names []string) (bool, []string) {
-	var problems []string
+func daemonsetIsAvailableByName(ctx context.Context, namespace, name string) {
+	GinkgoHelper()
+	daemonset, err := coreClient.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
+	Expect(err).NotTo(HaveOccurred())
+	daemonsetIsAvailable(ctx, daemonset)
+}
 
+func daemonsetsAreAvailable(ctx context.Context, namespace string, names []string) {
+	GinkgoHelper()
 	for _, name := range names {
 		daemonset, err := coreClient.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
-		if err != nil || !daemonsetIsAvailable(ctx, daemonset) {
-			problems = append(problems, name)
-		}
+		Expect(err).NotTo(HaveOccurred())
+		daemonsetIsAvailable(ctx, daemonset)
 	}
-
-	return len(problems) == 0, problems
 }

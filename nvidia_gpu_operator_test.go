@@ -1,11 +1,10 @@
 package cluster_tests
 
 import (
-	"fmt"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 )
@@ -19,20 +18,20 @@ var _ = Describe("NvidiaGpuOperator", Label("gpu"), func() {
 		"nvidia.com/gpu.present": "true",
 	}).String()
 
+	var gpuNodes []v1.Node
+
 	BeforeEach(func(ctx SpecContext) {
 		nodes, err := coreClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 		Expect(err).NotTo(HaveOccurred(), "list GPU nodes")
 		if len(nodes.Items) == 0 {
 			Skip("no gpu nodes")
 		}
+		gpuNodes = nodes.Items
 	})
 
 	It("has a gpu.product label on every node with gpu.present=true", func(ctx SpecContext) {
-		nodes, err := coreClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
-		Expect(err).NotTo(HaveOccurred(), "list GPU nodes")
-
 		var missingProductLabel []string
-		for _, node := range nodes.Items {
+		for _, node := range gpuNodes {
 			if _, found := node.Labels["nvidia.com/gpu.product"]; !found {
 				missingProductLabel = append(missingProductLabel, node.Name)
 			}
@@ -40,34 +39,31 @@ var _ = Describe("NvidiaGpuOperator", Label("gpu"), func() {
 		Expect(missingProductLabel).To(BeEmpty(), "nodes missing nvidia.com/gpu.product: %v", missingProductLabel)
 	})
 
-	It("has available deployments", func(ctx SpecContext) {
-		deploymentsAreAvailable(ctx, "nvidia-gpu-operator", []string{"gpu-operator"})
-	})
+	DescribeTable("has available deployment", func(ctx SpecContext, name string) {
+		deploymentIsAvailableByName(ctx, nvidiaGpuOperatorNamespace, name)
+	},
+		Entry("gpu-operator", "gpu-operator"),
+	)
 
-	It("has available daemonsets", func(ctx SpecContext) {
-		if available, problems := daemonsetsAreAvailable(ctx, nvidiaGpuOperatorNamespace, []string{
-			"gpu-feature-discovery",
-			"nvidia-container-toolkit-daemonset",
-			"nvidia-dcgm",
-			"nvidia-dcgm-exporter",
-			"nvidia-device-plugin-daemonset",
-			"nvidia-device-plugin-mps-control-daemon",
-			"nvidia-mig-manager",
-			"nvidia-node-status-exporter",
-			"nvidia-operator-validator",
-		}); !available {
-			Fail(fmt.Sprintf("daemonsets are not available: %v", problems))
-		}
-	})
+	DescribeTable("has available daemonset", func(ctx SpecContext, name string) {
+		daemonsetIsAvailableByName(ctx, nvidiaGpuOperatorNamespace, name)
+	},
+		Entry("gpu-feature-discovery", "gpu-feature-discovery"),
+		Entry("nvidia-container-toolkit-daemonset", "nvidia-container-toolkit-daemonset"),
+		Entry("nvidia-dcgm", "nvidia-dcgm"),
+		Entry("nvidia-dcgm-exporter", "nvidia-dcgm-exporter"),
+		Entry("nvidia-device-plugin-daemonset", "nvidia-device-plugin-daemonset"),
+		Entry("nvidia-device-plugin-mps-control-daemon", "nvidia-device-plugin-mps-control-daemon"),
+		Entry("nvidia-mig-manager", "nvidia-mig-manager"),
+		Entry("nvidia-node-status-exporter", "nvidia-node-status-exporter"),
+		Entry("nvidia-operator-validator", "nvidia-operator-validator"),
+	)
 
 	It("has available driver daemonset", func(ctx SpecContext) {
 		daemonsets, err := coreClient.AppsV1().DaemonSets(nvidiaGpuOperatorNamespace).
 			List(ctx, metav1.ListOptions{LabelSelector: "app.kubernetes.io/component=nvidia-driver"})
 		Expect(err).NotTo(HaveOccurred(), "list GPU driver daemonset")
 		Expect(daemonsets.Items).To(HaveLen(1))
-		ds := daemonsets.Items[0]
-		if !daemonsetIsAvailable(ctx, &ds) {
-			Fail(fmt.Sprintf("nvidia-driver daemonset %s is not available", ds.GetName()))
-		}
+		daemonsetIsAvailable(ctx, &daemonsets.Items[0])
 	})
 })
