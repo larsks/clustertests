@@ -21,6 +21,23 @@ var (
 	coreClient    kubernetes.Interface
 )
 
+// hasCondition reports whether conditions contains the requested type and status.
+// fieldValues extracts the type and status from each condition.
+func hasCondition[C any, T ~string, S ~string](
+	conditions []C,
+	conditionType T,
+	status S,
+	fieldValues func(C) (T, S),
+) bool {
+	for _, condition := range conditions {
+		gotType, gotStatus := fieldValues(condition)
+		if gotType == conditionType && gotStatus == status {
+			return true
+		}
+	}
+	return false
+}
+
 // deploymentIsAvailable reports whether the specified deployment has an Available=True condition.
 func deploymentIsAvailable(deployment *v1.Deployment) {
 	GinkgoHelper()
