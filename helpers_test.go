@@ -19,12 +19,54 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/pager"
 )
 
 var (
 	dynamicClient dynamic.Interface
 	coreClient    kubernetes.Interface
 )
+
+// listPageSize bounds how many items are fetched per page for any List call
+// in this suite that isn't restricted to a single namespace, so a check
+// doesn't pull an entire large cluster's worth of objects into memory, or
+// into one oversized request, at once.
+const listPageSize = 500
+
+// eachResource pages through every object of gvr matching opts and calls fn
+// for each one, instead of fetching the whole list at once. For a namespaced
+// resource, omitting a namespace restriction in opts (as every caller here
+// does) spans all namespaces.
+func eachResource(
+	ctx context.Context,
+	gvr schema.GroupVersionResource,
+	opts metav1.ListOptions,
+	fn func(*unstructured.Unstructured) error,
+) error {
+	listPages := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+		return dynamicClient.Resource(gvr).List(ctx, opts)
+	})
+	listPages.PageSize = listPageSize
+	return listPages.EachListItem(ctx, opts, func(obj runtime.Object) error {
+		return fn(obj.(*unstructured.Unstructured))
+	})
+}
+
+// listNodes pages through nodes matching opts and returns them all. Nodes are
+// cluster-scoped, so this always spans the whole cluster.
+func listNodes(ctx context.Context, opts metav1.ListOptions) ([]corev1.Node, error) {
+	listPages := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+		return coreClient.CoreV1().Nodes().List(ctx, opts)
+	})
+	listPages.PageSize = listPageSize
+
+	var nodes []corev1.Node
+	err := listPages.EachListItem(ctx, opts, func(obj runtime.Object) error {
+		nodes = append(nodes, *obj.(*corev1.Node))
+		return nil
+	})
+	return nodes, err
+}
 
 // resourceKindExists caches whether the API server serves each resource type
 // at all, as distinct from whether any instances of it currently exist. Only
@@ -143,18 +185,16 @@ type conditionExpectation struct {
 func expectConditions(ctx context.Context, gvr schema.GroupVersionResource, expected ...conditionExpectation) int {
 	GinkgoHelper()
 
-	list, err := dynamicClient.Resource(gvr).List(ctx, metav1.ListOptions{})
-	Expect(err).NotTo(HaveOccurred(), "list %s", gvr.Resource)
-
 	var problems []string
-	for i := range list.Items {
-		obj := &list.Items[i]
+	count := 0
+	err := eachResource(ctx, gvr, metav1.ListOptions{}, func(obj *unstructured.Unstructured) error {
+		count++
 		id := resourceID(obj)
 
 		conditions, err := conditionsOf(obj)
 		if err != nil {
 			problems = append(problems, fmt.Sprintf("%s: %v", id, err))
-			continue
+			return nil
 		}
 
 		for _, want := range expected {
@@ -174,11 +214,13 @@ func expectConditions(ctx context.Context, gvr schema.GroupVersionResource, expe
 				))
 			}
 		}
-	}
+		return nil
+	})
+	Expect(err).NotTo(HaveOccurred(), "list %s", gvr.Resource)
 
 	slices.Sort(problems)
 	Expect(problems).To(BeEmpty())
-	return len(list.Items)
+	return count
 }
 
 // expectAllReady fails unless every resource of the given type has a condition
@@ -303,9 +345,9 @@ func daemonsetIsAvailable(ctx context.Context, daemonset *appsv1.DaemonSet) {
 	id := objectID(daemonset)
 
 	selector := labels.Set(daemonset.Spec.Template.Spec.NodeSelector).AsSelector()
-	nodes, err := coreClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{LabelSelector: selector.String()})
+	nodes, err := listNodes(ctx, metav1.ListOptions{LabelSelector: selector.String()})
 	Expect(err).NotTo(HaveOccurred(), "list nodes matching daemonset %s NodeSelector", id)
-	expected := len(nodes.Items)
+	expected := len(nodes)
 
 	Expect(daemonset.Status.ObservedGeneration).To(
 		BeNumerically(">=", daemonset.Generation),

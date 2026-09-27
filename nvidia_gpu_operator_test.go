@@ -30,9 +30,9 @@ func gpuNodes(ctx context.Context) []corev1.Node {
 	GinkgoHelper()
 
 	if cachedGPUNodes == nil {
-		nodes, err := coreClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{LabelSelector: gpuNodeLabelSelector})
+		nodes, err := listNodes(ctx, metav1.ListOptions{LabelSelector: gpuNodeLabelSelector})
 		Expect(err).NotTo(HaveOccurred(), "list GPU nodes")
-		cachedGPUNodes = &nodes.Items
+		cachedGPUNodes = &nodes
 	}
 	return *cachedGPUNodes
 }

@@ -50,24 +50,20 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 	// A Ready=True condition can lag reality, so check the certificate's
 	// own dates as well.
 	It("has no expired certificates or overdue renewals", func(ctx SpecContext) {
-		certificates, err := dynamicClient.Resource(certificateGVR).List(ctx, metav1.ListOptions{})
-		Expect(err).NotTo(HaveOccurred(), "list certificates")
-
 		now := time.Now()
 		var problems []string
-		for i := range certificates.Items {
-			certificate := &certificates.Items[i]
+		err := eachResource(ctx, certificateGVR, metav1.ListOptions{}, func(certificate *unstructured.Unstructured) error {
 			id := resourceID(certificate)
 
 			notAfter, hasNotAfter, err := statusTime(certificate, "notAfter")
 			if err != nil {
 				problems = append(problems, fmt.Sprintf("%s: %v", id, err))
-				continue
+				return nil
 			}
 			renewalTime, hasRenewalTime, err := statusTime(certificate, "renewalTime")
 			if err != nil {
 				problems = append(problems, fmt.Sprintf("%s: %v", id, err))
-				continue
+				return nil
 			}
 
 			switch {
@@ -78,7 +74,9 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 					"%s: renewal overdue since %s", id, renewalTime.Format(time.RFC3339),
 				))
 			}
-		}
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "list certificates")
 
 		slices.Sort(problems)
 		Expect(problems).To(BeEmpty())

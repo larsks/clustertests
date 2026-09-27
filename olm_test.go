@@ -48,41 +48,41 @@ var (
 
 var _ = Describe("OLM", Label("olm"), func() {
 	It("requires each original ClusterServiceVersion to be Succeeded", func(ctx SpecContext) {
-		list, err := dynamicClient.Resource(clusterServiceVersionGVR).List(ctx, metav1.ListOptions{
-			LabelSelector: "!" + clusterServiceVersionCopiedFromLabel,
-		})
-		Expect(err).NotTo(HaveOccurred(), "list ClusterServiceVersions across all namespaces")
-		Expect(list.Items).NotTo(BeEmpty(), "no original ClusterServiceVersions found")
-
 		var problems []string
-		for _, csv := range list.Items {
+		count := 0
+		err := eachResource(ctx, clusterServiceVersionGVR, metav1.ListOptions{
+			LabelSelector: "!" + clusterServiceVersionCopiedFromLabel,
+		}, func(csv *unstructured.Unstructured) error {
+			count++
+			id := resourceID(csv)
 			phase, found, err := unstructured.NestedString(csv.Object, "status", "phase")
-			Expect(err).NotTo(HaveOccurred(), "read phase for ClusterServiceVersion %s/%s", csv.GetNamespace(), csv.GetName())
+			if err != nil {
+				return fmt.Errorf("read phase for ClusterServiceVersion %s: %w", id, err)
+			}
 			if !found {
 				phase = "<missing>"
 			}
 			if phase != "Succeeded" {
-				problems = append(problems, fmt.Sprintf("%s/%s: phase=%s", csv.GetNamespace(), csv.GetName(), phase))
+				problems = append(problems, fmt.Sprintf("%s: phase=%s", id, phase))
 			}
-		}
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "list ClusterServiceVersions across all namespaces")
+		Expect(count).NotTo(BeZero(), "no original ClusterServiceVersions found")
 
 		slices.Sort(problems)
 		Expect(problems).To(BeEmpty())
 	})
 
 	It("requires every Subscription to be free of catalog and install errors", func(ctx SpecContext) {
-		list, err := dynamicClient.Resource(subscriptionGVR).List(ctx, metav1.ListOptions{})
-		Expect(err).NotTo(HaveOccurred(), "list Subscriptions across all namespaces")
-
 		var problems []string
-		for item := range list.Items {
-			obj := &list.Items[item]
+		err := eachResource(ctx, subscriptionGVR, metav1.ListOptions{}, func(obj *unstructured.Unstructured) error {
 			id := resourceID(obj)
 
 			conditions, err := conditionsOf(obj)
 			if err != nil {
 				problems = append(problems, fmt.Sprintf("%s: %v", id, err))
-				continue
+				return nil
 			}
 
 			for _, condType := range subscriptionErrorConditions {
@@ -93,7 +93,9 @@ var _ = Describe("OLM", Label("olm"), func() {
 					))
 				}
 			}
-		}
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "list Subscriptions across all namespaces")
 
 		slices.Sort(problems)
 		Expect(problems).To(BeEmpty())
@@ -103,20 +105,20 @@ var _ = Describe("OLM", Label("olm"), func() {
 	// under a manual approval strategy, and other non-terminal phases are
 	// transient, so only the terminal "Failed" phase is treated as unhealthy.
 	It("requires every InstallPlan to not have failed", func(ctx SpecContext) {
-		list, err := dynamicClient.Resource(installPlanGVR).List(ctx, metav1.ListOptions{})
-		Expect(err).NotTo(HaveOccurred(), "list InstallPlans across all namespaces")
-
 		var problems []string
-		for i := range list.Items {
-			obj := &list.Items[i]
+		err := eachResource(ctx, installPlanGVR, metav1.ListOptions{}, func(obj *unstructured.Unstructured) error {
 			id := resourceID(obj)
 
 			phase, _, err := unstructured.NestedString(obj.Object, "status", "phase")
-			Expect(err).NotTo(HaveOccurred(), "read phase for InstallPlan %s", id)
+			if err != nil {
+				return fmt.Errorf("read phase for InstallPlan %s: %w", id, err)
+			}
 			if phase == "Failed" {
 				problems = append(problems, fmt.Sprintf("%s: phase=%s", id, phase))
 			}
-		}
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "list InstallPlans across all namespaces")
 
 		slices.Sort(problems)
 		Expect(problems).To(BeEmpty())

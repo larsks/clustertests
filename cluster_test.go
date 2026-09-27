@@ -17,11 +17,6 @@ import (
 	"k8s.io/client-go/tools/pager"
 )
 
-// podListPageSize bounds how many pods are fetched per page when listing
-// pods across all namespaces, so the check doesn't pull the entire cluster's
-// pod list into memory at once on a large cluster.
-const podListPageSize = 500
-
 var (
 	clusterOperatorGVR = schema.GroupVersionResource{
 		Group:    "config.openshift.io",
@@ -42,12 +37,12 @@ var (
 
 var _ = Describe("cluster health", func() {
 	It("requires every node to be schedulable, Ready, and free of resource pressure or network problems", Label("nodes"), func(ctx SpecContext) {
-		nodes, err := coreClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+		nodes, err := listNodes(ctx, metav1.ListOptions{})
 		Expect(err).NotTo(HaveOccurred(), "list nodes")
-		Expect(nodes.Items).NotTo(BeEmpty(), "no nodes found")
+		Expect(nodes).NotTo(BeEmpty(), "no nodes found")
 
 		var problems []string
-		for _, node := range nodes.Items {
+		for _, node := range nodes {
 			var issues []string
 
 			if node.Spec.Unschedulable {
@@ -86,11 +81,14 @@ var _ = Describe("cluster health", func() {
 	})
 
 	It("requires every PersistentVolumeClaim to be Bound", Label("storage"), func(ctx SpecContext) {
-		claims, err := coreClient.CoreV1().PersistentVolumeClaims(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-		Expect(err).NotTo(HaveOccurred(), "list PersistentVolumeClaims across all namespaces")
+		listClaims := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+			return coreClient.CoreV1().PersistentVolumeClaims(metav1.NamespaceAll).List(ctx, opts)
+		})
+		listClaims.PageSize = listPageSize
 
 		var problems []string
-		for _, claim := range claims.Items {
+		err := listClaims.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
+			claim := obj.(*corev1.PersistentVolumeClaim)
 			if claim.Status.Phase != corev1.ClaimBound {
 				phase := string(claim.Status.Phase)
 				if phase == "" {
@@ -98,7 +96,9 @@ var _ = Describe("cluster health", func() {
 				}
 				problems = append(problems, fmt.Sprintf("%s/%s: phase=%s", claim.Namespace, claim.Name, phase))
 			}
-		}
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "list PersistentVolumeClaims across all namespaces")
 
 		slices.Sort(problems)
 		Expect(problems).To(BeEmpty())
@@ -137,11 +137,14 @@ var _ = Describe("cluster health", func() {
 	// point-in-time read, so a CSR caught moments after creation can cause a
 	// spurious failure.
 	It("requires no CertificateSigningRequest to be stuck pending", Label("csr"), func(ctx SpecContext) {
-		csrs, err := coreClient.CertificatesV1().CertificateSigningRequests().List(ctx, metav1.ListOptions{})
-		Expect(err).NotTo(HaveOccurred(), "list CertificateSigningRequests")
+		listCSRs := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+			return coreClient.CertificatesV1().CertificateSigningRequests().List(ctx, opts)
+		})
+		listCSRs.PageSize = listPageSize
 
 		var problems []string
-		for _, csr := range csrs.Items {
+		err := listCSRs.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
+			csr := obj.(*certificatesv1.CertificateSigningRequest)
 			var decided bool
 			for _, condition := range csr.Status.Conditions {
 				if condition.Type == certificatesv1.CertificateApproved || condition.Type == certificatesv1.CertificateDenied {
@@ -152,7 +155,9 @@ var _ = Describe("cluster health", func() {
 			if !decided {
 				problems = append(problems, csr.Name)
 			}
-		}
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "list CertificateSigningRequests")
 
 		slices.Sort(problems)
 		Expect(problems).To(BeEmpty())
@@ -167,7 +172,7 @@ var _ = Describe("cluster health", func() {
 		listPods := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
 			return coreClient.CoreV1().Pods(metav1.NamespaceAll).List(ctx, opts)
 		})
-		listPods.PageSize = podListPageSize
+		listPods.PageSize = listPageSize
 
 		var problems []string
 		err := listPods.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
