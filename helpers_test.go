@@ -53,6 +53,36 @@ func skipIfNamespaceDoesNotExist(ctx context.Context, namespace string) {
 	}
 }
 
+// resourceKindExists caches whether the API server serves each resource type
+// at all, as distinct from whether any instances of it currently exist.
+var resourceKindExists = map[schema.GroupVersionResource]bool{}
+
+// skipIfResourceKindDoesNotExist skips the current spec if the API server
+// does not serve the given resource type at all. This is for a resource that
+// is architecturally absent on some clusters, such as MachineConfigPools on
+// a HyperShift hosted cluster, as opposed to a resource type that always
+// exists but happens to have no instances, or an operator that failed to
+// install. A CRD is not the sort of thing that disappears because its
+// controller crashed, so this doesn't hide the kind of failure
+// skipIfNamespaceDoesNotExist can.
+func skipIfResourceKindDoesNotExist(ctx context.Context, gvr schema.GroupVersionResource) {
+	GinkgoHelper()
+
+	exists, cached := resourceKindExists[gvr]
+	if !cached {
+		_, err := dynamicClient.Resource(gvr).List(ctx, metav1.ListOptions{Limit: 1})
+		if err != nil && !apierrors.IsNotFound(err) {
+			Expect(err).NotTo(HaveOccurred(), "list %s", gvr.Resource)
+		}
+		exists = err == nil
+		resourceKindExists[gvr] = exists
+	}
+
+	if !exists {
+		Skip(fmt.Sprintf("resource type %q is not served by this API server", gvr.Resource))
+	}
+}
+
 // conditionReady is the name of the standard readiness condition used by
 // Certificates, SecretStores, ExternalSecrets, and most other CRDs.
 const conditionReady = "Ready"
@@ -154,6 +184,11 @@ func expectAllReady(ctx context.Context, gvr schema.GroupVersionResource, condTy
 // deploymentIsAvailable asserts whether the specified deployment has an Available=True condition.
 func deploymentIsAvailable(deployment *appsv1.Deployment) {
 	GinkgoHelper()
+
+	Expect(deployment.Spec.Replicas).ToNot(BeNil())
+	desired := *deployment.Spec.Replicas
+	Expect(desired).To(BeNumerically(">", 0), "deployment %q is scaled to 0 replicas", deployment.Name)
+
 	var available bool
 	for _, condition := range deployment.Status.Conditions {
 		if condition.Type == appsv1.DeploymentAvailable {
@@ -171,8 +206,6 @@ func deploymentIsAvailable(deployment *appsv1.Deployment) {
 	Expect(deployment.Status.ObservedGeneration).To(
 		BeNumerically(">=", deployment.Generation),
 	)
-	Expect(deployment.Spec.Replicas).ToNot(BeNil())
-	desired := *deployment.Spec.Replicas
 	Expect(deployment.Status.AvailableReplicas).To(Equal(desired))
 	Expect(deployment.Status.UpdatedReplicas).To(Equal(desired))
 }
