@@ -71,6 +71,31 @@ func deploymentIsAvailableByName(ctx context.Context, namespace, name string) {
 	deploymentIsAvailable(deployment)
 }
 
+func statefulSetIsAvailable(statefulSet *appsv1.StatefulSet) {
+	GinkgoHelper()
+	Expect(statefulSet.Status.ObservedGeneration).To(
+		BeNumerically(">=", statefulSet.Generation),
+		"statefulset %q status has not observed its current generation", statefulSet.Name,
+	)
+	Expect(statefulSet.Spec.Replicas).NotTo(BeNil())
+	desired := *statefulSet.Spec.Replicas
+	Expect(statefulSet.Status.ReadyReplicas).To(
+		Equal(desired),
+		"statefulset %q ready replicas", statefulSet.Name,
+	)
+	Expect(statefulSet.Status.UpdatedReplicas).To(
+		Equal(desired),
+		"statefulset %q updated replicas", statefulSet.Name,
+	)
+}
+
+func statefulSetIsAvailableByName(ctx context.Context, namespace, name string) {
+	GinkgoHelper()
+	statefulSet, err := coreClient.AppsV1().StatefulSets(namespace).Get(ctx, name, metav1.GetOptions{})
+	Expect(err).NotTo(HaveOccurred(), "get statefulset %q in namespace %q", name, namespace)
+	statefulSetIsAvailable(statefulSet)
+}
+
 func deploymentsAreAvailable(ctx context.Context, namespace string, names []string) {
 	GinkgoHelper()
 	for _, name := range names {
