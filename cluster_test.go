@@ -67,14 +67,14 @@ var _ = Describe("cluster health", func() {
 	})
 
 	It("requires each original ClusterServiceVersion to be Succeeded", Label("olm"), func(ctx SpecContext) {
-		list, err := dynamicClient.Resource(clusterServiceVersionGVR).List(ctx, metav1.ListOptions{})
+		list, err := dynamicClient.Resource(clusterServiceVersionGVR).List(ctx, metav1.ListOptions{
+			LabelSelector: "!" + clusterServiceVersionCopiedFromLabel,
+		})
 		Expect(err).NotTo(HaveOccurred(), "list ClusterServiceVersions across all namespaces")
-
-		originals := originalClusterServiceVersions(list.Items)
-		Expect(originals).NotTo(BeEmpty(), "no original ClusterServiceVersions found")
+		Expect(list.Items).NotTo(BeEmpty(), "no original ClusterServiceVersions found")
 
 		var unhealthy []string
-		for _, csv := range originals {
+		for _, csv := range list.Items {
 			phase, found, err := unstructured.NestedString(csv.Object, "status", "phase")
 			Expect(err).NotTo(HaveOccurred(), "read phase for ClusterServiceVersion %s/%s", csv.GetNamespace(), csv.GetName())
 			if !found {
@@ -135,17 +135,4 @@ func nodeConditionStatus(node corev1.Node, conditionType corev1.NodeConditionTyp
 		}
 	}
 	return "", false
-}
-
-func originalClusterServiceVersions(csvs []unstructured.Unstructured) []unstructured.Unstructured {
-	originals := make([]unstructured.Unstructured, 0, len(csvs))
-	for _, csv := range csvs {
-		// OLM copies AllNamespaces CSVs into other namespaces with this label.
-		// Ignore those copies so each installed CSV is checked once.
-		if _, isCopy := csv.GetLabels()[clusterServiceVersionCopiedFromLabel]; isCopy {
-			continue
-		}
-		originals = append(originals, csv)
-	}
-	return originals
 }
