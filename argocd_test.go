@@ -2,16 +2,27 @@ package cluster_tests
 
 import (
 	. "github.com/onsi/ginkgo/v2"
-	//. "github.com/onsi/gomega"
+
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 const (
 	argocdNamespace = "openshift-gitops"
 )
 
+var (
+	// applicationGVR is used only to detect whether ArgoCD is installed on
+	// this cluster; the suite doesn't otherwise check Application resources.
+	applicationGVR = schema.GroupVersionResource{
+		Group:    "argoproj.io",
+		Version:  "v1alpha1",
+		Resource: "applications",
+	}
+)
+
 var _ = Describe("ArgoCD", Label("argocd"), func() {
 	BeforeEach(func(ctx SpecContext) {
-		skipIfNamespaceDoesNotExist(ctx, argocdNamespace)
+		skipIfResourceKindDoesNotExist(applicationGVR)
 	})
 
 	DescribeTable("has available deployment", func(ctx SpecContext, name string) {

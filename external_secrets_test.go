@@ -30,7 +30,7 @@ var (
 
 var _ = Describe("ExternalSecretsOperator", Label("secrets"), func() {
 	BeforeEach(func(ctx SpecContext) {
-		skipIfNamespaceDoesNotExist(ctx, externalSecretsNamespace)
+		skipIfResourceKindDoesNotExist(externalSecretGVR)
 	})
 
 	DescribeTable("has available deployment", func(ctx SpecContext, name string) {

@@ -26,55 +26,52 @@ var (
 	coreClient    kubernetes.Interface
 )
 
-// namespaceExists caches whether each namespace exists so that the guard
-// runs before every spec without repeating the API call. Only definitive
-// answers are cached; a failed lookup fails the spec and is retried by the
-// next one. Ginkgo runs parallel specs in separate processes, so no locking
-// is needed.
-var namespaceExists = map[string]bool{}
-
-// skipIfNamespaceDoesNotExist skips the current spec if the namespace does not
-// exist. The answer is looked up once per test process.
-func skipIfNamespaceDoesNotExist(ctx context.Context, namespace string) {
-	GinkgoHelper()
-
-	exists, cached := namespaceExists[namespace]
-	if !cached {
-		_, err := coreClient.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
-		if err != nil && !apierrors.IsNotFound(err) {
-			Expect(err).NotTo(HaveOccurred(), "get namespace %q", namespace)
-		}
-		exists = err == nil
-		namespaceExists[namespace] = exists
-	}
-
-	if !exists {
-		Skip(fmt.Sprintf("namespace %q does not exist", namespace))
-	}
-}
-
 // resourceKindExists caches whether the API server serves each resource type
-// at all, as distinct from whether any instances of it currently exist.
+// at all, as distinct from whether any instances of it currently exist. Only
+// definitive answers are cached; a failed lookup fails the spec and is
+// retried by the next one. Ginkgo runs parallel specs in separate processes,
+// so no locking is needed.
 var resourceKindExists = map[schema.GroupVersionResource]bool{}
 
 // skipIfResourceKindDoesNotExist skips the current spec if the API server
-// does not serve the given resource type at all. This is for a resource that
-// is architecturally absent on some clusters, such as MachineConfigPools on
-// a HyperShift hosted cluster, as opposed to a resource type that always
-// exists but happens to have no instances, or an operator that failed to
-// install. A CRD is not the sort of thing that disappears because its
-// controller crashed, so this doesn't hide the kind of failure
-// skipIfNamespaceDoesNotExist can.
-func skipIfResourceKindDoesNotExist(ctx context.Context, gvr schema.GroupVersionResource) {
+// does not serve the given resource type at all. This is how each optional
+// operator suite (ArgoCD, cert-manager, external-secrets, ...) detects
+// whether that operator is installed on this cluster, by checking for one of
+// the CRDs it owns.
+//
+// A CRD is a better signal for this than the operator's namespace: the CRD is
+// created once, at install time, and normal operator trouble (a crashed
+// controller, a deleted namespace, a deployment scaled to 0) doesn't remove
+// it. So a missing CRD means the operator was never installed here, while a
+// present CRD with a broken deployment or a missing namespace is a real
+// failure the specs below will still catch, since they no longer get
+// skipped for reasons the CRD guard didn't intend. The one case this doesn't
+// distinguish is a full uninstall that also deletes the CRDs, which then
+// looks the same as never having been installed; that's a much more
+// deliberate action than a namespace merely disappearing, so this narrows
+// the blind spot without eliminating it.
+//
+// Existence is checked via discovery (/apis/<group>/<version>), not a List
+// call. Discovery is covered by the system:discovery ClusterRole granted to
+// every authenticated user by default, so this works even for an identity
+// with no list permission on the resource itself. A List call doesn't have
+// that property: RBAC is checked before the API server would report that the
+// resource type doesn't exist, so a plain Forbidden (a missing grant, not a
+// missing resource) would otherwise be indistinguishable from a genuinely
+// absent CRD, and would fail every spec in the suite instead of skipping
+// them.
+func skipIfResourceKindDoesNotExist(gvr schema.GroupVersionResource) {
 	GinkgoHelper()
 
 	exists, cached := resourceKindExists[gvr]
 	if !cached {
-		_, err := dynamicClient.Resource(gvr).List(ctx, metav1.ListOptions{Limit: 1})
+		resources, err := coreClient.Discovery().ServerResourcesForGroupVersion(gvr.GroupVersion().String())
 		if err != nil && !apierrors.IsNotFound(err) {
-			Expect(err).NotTo(HaveOccurred(), "list %s", gvr.Resource)
+			Expect(err).NotTo(HaveOccurred(), "discover %s", gvr.GroupVersion())
 		}
-		exists = err == nil
+		exists = err == nil && slices.ContainsFunc(resources.APIResources, func(r metav1.APIResource) bool {
+			return r.Name == gvr.Resource
+		})
 		resourceKindExists[gvr] = exists
 	}
 

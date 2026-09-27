@@ -32,7 +32,7 @@ var (
 
 var _ = Describe("CertManager", Label("cert-manager"), func() {
 	BeforeEach(func(ctx SpecContext) {
-		skipIfNamespaceDoesNotExist(ctx, certManagerNamespace)
+		skipIfResourceKindDoesNotExist(certificateGVR)
 	})
 
 	DescribeTable("has available deployment", func(ctx SpecContext, name string) {

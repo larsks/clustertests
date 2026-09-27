@@ -113,7 +113,7 @@ var _ = Describe("cluster health", func() {
 	})
 
 	It("requires every MachineConfigPool to be Updated and not Degraded", Label("machine-config"), func(ctx SpecContext) {
-		skipIfResourceKindDoesNotExist(ctx, machineConfigPoolGVR)
+		skipIfResourceKindDoesNotExist(machineConfigPoolGVR)
 
 		checked := expectConditions(ctx, machineConfigPoolGVR,
 			conditionExpectation{Type: "Updated", Status: metav1.ConditionTrue},
