@@ -24,6 +24,16 @@ var (
 		Version:  "v1alpha1",
 		Resource: "clusterserviceversions",
 	}
+	clusterOperatorGVR = schema.GroupVersionResource{
+		Group:    "config.openshift.io",
+		Version:  "v1",
+		Resource: "clusteroperators",
+	}
+	clusterVersionGVR = schema.GroupVersionResource{
+		Group:    "config.openshift.io",
+		Version:  "v1",
+		Resource: "clusterversions",
+	}
 )
 
 var _ = Describe("cluster health", func() {
@@ -103,6 +113,22 @@ var _ = Describe("cluster health", func() {
 
 		sort.Strings(unbound)
 		Expect(unbound).To(BeEmpty())
+	})
+
+	It("requires every ClusterOperator to be Available and not Degraded", Label("cluster-operators"), func(ctx SpecContext) {
+		checked := expectConditions(ctx, clusterOperatorGVR,
+			conditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
+			conditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
+		)
+		Expect(checked).NotTo(BeZero(), "no ClusterOperators found")
+	})
+
+	It("requires ClusterVersion to be Available and not Failing", Label("cluster-version"), func(ctx SpecContext) {
+		checked := expectConditions(ctx, clusterVersionGVR,
+			conditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
+			conditionExpectation{Type: "Failing", Status: metav1.ConditionFalse},
+		)
+		Expect(checked).NotTo(BeZero(), "no ClusterVersion found")
 	})
 })
 

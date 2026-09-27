@@ -46,11 +46,9 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	)
 	if err != nil {
 		Fail(fmt.Sprintf("Kubernetes authentication check failed; aborting suite before specs: %v", err))
-		return
 	}
 	if identity.Status.UserInfo.Username == "" || identity.Status.UserInfo.Username == "system:anonymous" || slices.Contains(identity.Status.UserInfo.Groups, "system:unauthenticated") {
 		Fail(fmt.Sprintf("Kubernetes authentication check returned an unauthenticated identity (%q); aborting suite before specs", identity.Status.UserInfo.Username))
-		return
 	}
 })
 

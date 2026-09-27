@@ -90,12 +90,20 @@ func conditionsOf(obj *unstructured.Unstructured) ([]metav1.Condition, error) {
 	return conditions, nil
 }
 
-// expectAllReady lists every resource of the given type across all namespaces
-// and fails unless each has a condition of type condType with status True.
-// Offenders are reported as namespace/name along with the condition's reason
-// and message. A condition whose observedGeneration is older than the
-// resource's generation is treated as stale.
-func expectAllReady(ctx context.Context, gvr schema.GroupVersionResource, condType string) {
+// conditionExpectation names a condition type and the status it must have.
+type conditionExpectation struct {
+	Type   string
+	Status metav1.ConditionStatus
+}
+
+// expectConditions lists every resource of the given type across all
+// namespaces and fails unless each has every expected condition with the
+// expected status. A missing condition counts as a failure. Offenders are
+// reported as namespace/name along with the condition's reason and message. A
+// condition whose observedGeneration is older than the resource's generation
+// is treated as stale. It returns the number of resources checked so callers
+// can insist that at least one exists.
+func expectConditions(ctx context.Context, gvr schema.GroupVersionResource, expected ...conditionExpectation) int {
 	GinkgoHelper()
 
 	list, err := dynamicClient.Resource(gvr).List(ctx, metav1.ListOptions{})
@@ -112,27 +120,38 @@ func expectAllReady(ctx context.Context, gvr schema.GroupVersionResource, condTy
 			continue
 		}
 
-		condition := apimeta.FindStatusCondition(conditions, condType)
-		switch {
-		case condition == nil:
-			problems = append(problems, fmt.Sprintf("%s: no %s condition", id, condType))
-		case condition.Status != metav1.ConditionTrue:
-			problems = append(problems, fmt.Sprintf(
-				"%s: %s=%s (%s: %s)", id, condType, condition.Status, condition.Reason, condition.Message,
-			))
-		case condition.ObservedGeneration != 0 && condition.ObservedGeneration < obj.GetGeneration():
-			problems = append(problems, fmt.Sprintf(
-				"%s: %s is stale (observed generation %d, current generation %d)",
-				id, condType, condition.ObservedGeneration, obj.GetGeneration(),
-			))
+		for _, want := range expected {
+			condition := apimeta.FindStatusCondition(conditions, want.Type)
+			switch {
+			case condition == nil:
+				problems = append(problems, fmt.Sprintf("%s: no %s condition", id, want.Type))
+			case condition.Status != want.Status:
+				problems = append(problems, fmt.Sprintf(
+					"%s: %s=%s, want %s (%s: %s)",
+					id, want.Type, condition.Status, want.Status, condition.Reason, condition.Message,
+				))
+			case condition.ObservedGeneration != 0 && condition.ObservedGeneration < obj.GetGeneration():
+				problems = append(problems, fmt.Sprintf(
+					"%s: %s is stale (observed generation %d, current generation %d)",
+					id, want.Type, condition.ObservedGeneration, obj.GetGeneration(),
+				))
+			}
 		}
 	}
 
 	slices.Sort(problems)
 	Expect(problems).To(BeEmpty())
+	return len(list.Items)
 }
 
-// deploymentIsAvailable reports whether the specified deployment has an Available=True condition.
+// expectAllReady fails unless every resource of the given type has a condition
+// of type condType with status True.
+func expectAllReady(ctx context.Context, gvr schema.GroupVersionResource, condType string) {
+	GinkgoHelper()
+	expectConditions(ctx, gvr, conditionExpectation{Type: condType, Status: metav1.ConditionTrue})
+}
+
+// deploymentIsAvailable asserts whether the specified deployment has an Available=True condition.
 func deploymentIsAvailable(deployment *appsv1.Deployment) {
 	GinkgoHelper()
 	var available bool
@@ -192,7 +211,7 @@ func statefulSetIsAvailableByName(ctx context.Context, namespace, name string) {
 
 /*
 * daemonsetIsAvailable verifies that the number of active instances of a
-* daemonset matches the number of expected instances based on it's
+* daemonset matches the number of expected instances based on its
 * NodeSelector. We are explicitly trying to identify daemonsets that should be
 * scheduled on a set of nodes but are not because the nodes are tainted and the
 * daemonset pods are missing the appropriate tolerations.
