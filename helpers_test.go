@@ -3,6 +3,7 @@ package clustertests
 import (
 	"context"
 	"fmt"
+	"os"
 	"slices"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -321,6 +322,30 @@ func deploymentIsAvailableByName(ctx context.Context, namespace, name string) {
 	deployment, err := coreClient.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
 	Expect(err).NotTo(HaveOccurred())
 	deploymentIsAvailable(deployment)
+}
+
+// deploymentIsAvailableIfPresent behaves like deploymentIsAvailableByName,
+// except it skips the spec instead of failing if the deployment doesn't
+// exist at all. Use it for a component that some install methods bundle (for
+// example, an OpenShift operator) and others don't (for example, a plain
+// Helm install).
+func deploymentIsAvailableIfPresent(ctx context.Context, namespace, name string) {
+	GinkgoHelper()
+	deployment, err := coreClient.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		Skip(fmt.Sprintf("deployment %s/%s not found", namespace, name))
+	}
+	Expect(err).NotTo(HaveOccurred())
+	deploymentIsAvailable(deployment)
+}
+
+// envOrDefault returns the value of the named environment variable, or def
+// if it's unset or empty.
+func envOrDefault(name, def string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return def
 }
 
 func statefulSetIsAvailable(statefulSet *appsv1.StatefulSet) {
