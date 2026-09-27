@@ -10,6 +10,10 @@ const (
 )
 
 var _ = Describe("ArgoCD", Label("argocd"), func() {
+	BeforeEach(func(ctx SpecContext) {
+		skipIfNamespaceDoesNotExist(ctx, argocdNamespace)
+	})
+
 	DescribeTable("has available deployment", func(ctx SpecContext, name string) {
 		deploymentIsAvailableByName(ctx, argocdNamespace, name)
 	},

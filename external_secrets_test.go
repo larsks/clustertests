@@ -81,6 +81,10 @@ func expectHealthySecretStores(
 }
 
 var _ = Describe("ExternalSecrestsOperator", Label("secrets"), func() {
+	BeforeEach(func(ctx SpecContext) {
+		skipIfNamespaceDoesNotExist(ctx, externalSecretsNamespace)
+	})
+
 	DescribeTable("has available deployment", func(ctx SpecContext, name string) {
 		deploymentIsAvailableByName(ctx, externalSecretsNamespace, name)
 	},
