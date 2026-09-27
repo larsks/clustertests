@@ -57,6 +57,16 @@ func skipIfNamespaceDoesNotExist(ctx context.Context, namespace string) {
 // Certificates, SecretStores, ExternalSecrets, and most other CRDs.
 const conditionReady = "Ready"
 
+// resourceID returns namespace/name for namespaced resources and just the name
+// for cluster-scoped ones, so that same-named resources in different
+// namespaces can be told apart in failure messages.
+func resourceID(obj *unstructured.Unstructured) string {
+	if namespace := obj.GetNamespace(); namespace != "" {
+		return namespace + "/" + obj.GetName()
+	}
+	return obj.GetName()
+}
+
 // conditionsOf decodes status.conditions from any resource into
 // metav1.Condition. Projects define their own condition types, but they all
 // serialize to the same JSON shape, so this gives a single type for checking
@@ -94,10 +104,7 @@ func expectAllReady(ctx context.Context, gvr schema.GroupVersionResource, condTy
 	var problems []string
 	for i := range list.Items {
 		obj := &list.Items[i]
-		id := obj.GetName()
-		if namespace := obj.GetNamespace(); namespace != "" {
-			id = namespace + "/" + id
-		}
+		id := resourceID(obj)
 
 		conditions, err := conditionsOf(obj)
 		if err != nil {
