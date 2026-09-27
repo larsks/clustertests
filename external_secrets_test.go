@@ -38,9 +38,15 @@ var _ = Describe("ExternalSecretsOperator", Label("secrets"), func() {
 	},
 		Entry("external-secrets", "external-secrets"),
 		Entry("external-secrets-cert-controller", "external-secrets-cert-controller"),
-		Entry("external-secrets-operator-controller-manager", "external-secrets-operator-controller-manager"),
 		Entry("external-secrets-webhook", "external-secrets-webhook"),
 	)
+
+	// external-secrets-operator-controller-manager only exists when
+	// external-secrets is installed via the OpenShift operator bundle, not on
+	// a plain Helm/upstream install.
+	It("has available deployment external-secrets-operator-controller-manager, if present", func(ctx SpecContext) {
+		deploymentIsAvailableIfPresent(ctx, externalSecretsNamespace, "external-secrets-operator-controller-manager")
+	})
 
 	It("has healthy ClusterSecretStores", func(ctx SpecContext) {
 		expectAllReady(ctx, clusterSecretStoreGVR, conditionReady)
