@@ -116,6 +116,13 @@ func deploymentsAreAvailable(ctx context.Context, namespace string, names []stri
 	}
 }
 
+/*
+* daemonsetIsAvailable verifies that the number of active instances of a
+* daemonset matches the number of expected instances based on it's
+* NodeSelector. We are explicitly trying to identify daemonsets that should be
+* scheduled on a set of nodes but are not because the nodes are tainted and the
+* daemonset pods are missing the appropriate tolerations.
+ */
 func daemonsetIsAvailable(ctx context.Context, daemonset *appsv1.DaemonSet) {
 	GinkgoHelper()
 	selector := labels.Set(daemonset.Spec.Template.Spec.NodeSelector).AsSelector()
