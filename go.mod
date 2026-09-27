@@ -5,7 +5,7 @@ go 1.26.6
 require (
 	github.com/cert-manager/cert-manager v1.21.2
 	github.com/external-secrets/external-secrets/apis v0.0.0-20260925151627-e95365a52ee2
-	github.com/onsi/ginkgo/v2 v2.32.1
+	github.com/onsi/ginkgo/v2 v2.33.0
 	github.com/onsi/gomega v1.42.1
 	k8s.io/api v0.36.3
 	k8s.io/apimachinery v0.36.3
