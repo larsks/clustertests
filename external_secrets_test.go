@@ -1,4 +1,4 @@
-package cluster_tests
+package clustertests
 
 import (
 	. "github.com/onsi/ginkgo/v2"
