@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Test Report</title>
+<style>
+  body {
+    font-family: "Helvetica", Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    color: #222;
+    background: #f7f7f7;
+  }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #333;
+    color: #fff;
+    padding: 10px 16px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+
+  .hamburger {
+    background: none;
+    border: none;
+    cursor: pointer;
+    width: 32px;
+    height: 28px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    padding: 0;
+    flex-shrink: 0;
+  }
+
+  .hamburger span {
+    display: block;
+    height: 2px;
+    background: #fff;
+    border-radius: 1px;
+  }
+
+  .topbar-title {
+    font-size: 16px;
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .menu-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+    z-index: 21;
+  }
+
+  .menu-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .menu {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 300px;
+    max-width: 85vw;
+    background: #fff;
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.25);
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    z-index: 22;
+    overflow-y: auto;
+  }
+
+  .menu.open {
+    transform: translateX(0);
+  }
+
+  .menu-header {
+    padding: 12px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #888;
+    border-bottom: 1px solid #eee;
+  }
+
+  .menu-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    padding: 12px 16px;
+    cursor: pointer;
+    font-size: 14px;
+    border-bottom: 1px solid #eee;
+  }
+
+  .menu-item:hover {
+    background: #f5f5f5;
+  }
+
+  .menu-item.active {
+    background: #eef1fb;
+    font-weight: bold;
+  }
+
+  .menu-item-name {
+    overflow-wrap: anywhere;
+  }
+
+  .count {
+    display: inline-block;
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: bold;
+    padding: 2px 7px;
+    border-radius: 10px;
+    background: #888;
+    color: #fff;
+  }
+
+  .count-failed {
+    background: #c33;
+  }
+
+  main {
+    padding: 16px 24px 40px;
+  }
+
+  h2 {
+    margin-top: 0;
+  }
+
+  .view {
+    display: none;
+  }
+
+  .view.active {
+    display: block;
+  }
+
+  .summary {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .summary span {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 14px;
+  }
+
+  .properties table, .suites-overview table, .tests table {
+    border-collapse: collapse;
+    margin-bottom: 8px;
+  }
+
+  .properties th, .properties td,
+  .suites-overview th, .suites-overview td {
+    text-align: left;
+    padding: 4px 12px;
+    border: 1px solid #ddd;
+    font-size: 13px;
+  }
+
+  .properties {
+    margin-bottom: 16px;
+  }
+
+  .properties summary, .test summary {
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .properties summary::-webkit-details-marker,
+  .test summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .properties > summary {
+    font-size: 16px;
+    font-weight: bold;
+    padding: 4px 0;
+  }
+
+  .properties table {
+    margin-top: 8px;
+  }
+
+  .toggle {
+    display: inline-block;
+    width: 10px;
+    flex-shrink: 0;
+    transition: transform 0.15s ease;
+  }
+
+  details[open] > summary .toggle {
+    transform: rotate(90deg);
+  }
+
+  .suites-overview {
+    margin-bottom: 24px;
+  }
+
+  .suites-overview table {
+    width: 100%;
+  }
+
+  .suite-row {
+    cursor: pointer;
+  }
+
+  .suite-row:hover {
+    background: #f0f0f0;
+  }
+
+  .suite-row.has-failures td.col-failed {
+    color: #c33;
+    font-weight: bold;
+  }
+
+  .tests-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .tests-header h3 {
+    margin: 0;
+  }
+
+  .expand-controls {
+    font-size: 13px;
+  }
+
+  .expand-controls button {
+    background: none;
+    border: none;
+    padding: 0;
+    margin-left: 12px;
+    color: #336;
+    text-decoration: underline;
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .test-controls {
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+
+  .test-controls button {
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 4px 10px;
+    margin-right: 6px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .test-controls button.active {
+    background: #555;
+    color: #fff;
+    border-color: #555;
+  }
+
+  .test-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .test {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .test-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+
+  .status-passed { background: #dfd; }
+  .status-failed { background: #fdd; }
+  .status-skipped { background: #eee; }
+
+  .test-status {
+    text-transform: uppercase;
+    font-weight: bold;
+    width: 70px;
+    flex-shrink: 0;
+  }
+
+  .test-suite {
+    display: none;
+    flex-shrink: 0;
+    font-size: 11px;
+    color: #555;
+    background: #e5e5e5;
+    border-radius: 3px;
+    padding: 2px 6px;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #view-overview .test-suite {
+    display: inline-block;
+  }
+
+  .test-name {
+    flex: 1;
+  }
+
+  .test-classname {
+    color: #666;
+    font-size: 12px;
+  }
+
+  .test-time {
+    width: 80px;
+    text-align: right;
+    flex-shrink: 0;
+    font-family: monospace;
+  }
+
+  .test-details {
+    border-top: 1px solid #ccc;
+  }
+
+  .test-block h4 {
+    margin: 0;
+    padding: 6px 12px 0;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #666;
+  }
+
+  .test-block pre {
+    margin: 0;
+    padding: 8px 12px;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .test-failure pre {
+    background: #fff5f5;
+  }
+
+  .test-output pre {
+    background: #f5f5f5;
+  }
+</style>
+</head>
+<body>
+
+{{define "testsHeader"}}
+<div class="tests-header">
+  <h3>{{.}}</h3>
+  <div class="expand-controls">
+    <button data-expand="all">Expand all</button>
+    <button data-expand="failed">Expand failed</button>
+    <button data-expand="none">Collapse all</button>
+  </div>
+</div>
+{{end}}
+
+{{define "testControls"}}
+<div class="test-controls">
+  Sort by:
+  <button data-sort="status">Status</button>
+  <button data-sort="name">Name</button>
+  <button data-sort="time">Runtime</button>
+</div>
+{{end}}
+
+{{define "testItem"}}
+<details class="test status-{{.Status}}" data-name="{{.Name}}" data-status="{{.Status}}" data-time="{{.TimeSeconds}}"{{if eq .Status "failed"}} open{{end}}>
+  <summary class="test-row">
+    <span class="toggle">&#9656;</span>
+    <span class="test-status">{{.Status}}</span>
+    <span class="test-suite">{{.SuiteName}}</span>
+    <span class="test-name">{{.Name}}</span>
+    {{if .Classname}}<span class="test-classname">{{.Classname}}</span>{{end}}
+    <span class="test-time">{{.TimeDisplay}}</span>
+  </summary>
+  <div class="test-details">
+    {{if .Failure}}
+    <div class="test-block test-failure">
+      <h4>Failure</h4>
+      <pre>{{.Failure}}</pre>
+    </div>
+    {{end}}
+    {{if .SystemOut}}
+    <div class="test-block test-output">
+      <h4>stdout</h4>
+      <pre>{{.SystemOut}}</pre>
+    </div>
+    {{end}}
+    {{if .SystemErr}}
+    <div class="test-block test-output">
+      <h4>stderr</h4>
+      <pre>{{.SystemErr}}</pre>
+    </div>
+    {{end}}
+  </div>
+</details>
+{{end}}
+
+<header class="topbar">
+  <button id="menu-toggle" class="hamburger" aria-label="Open suite menu" aria-expanded="false">
+    <span></span><span></span><span></span>
+  </button>
+  <h1 class="topbar-title">Test Report</h1>
+</header>
+
+<div id="menu-overlay" class="menu-overlay"></div>
+
+<nav id="menu" class="menu">
+  <div class="menu-header">Suites</div>
+  <button class="menu-item active" data-view="view-overview">
+    <span class="menu-item-name">Overview</span>
+  </button>
+  {{range $i, $suite := .Suites}}
+  <button class="menu-item" data-view="view-suite-{{$i}}">
+    <span class="menu-item-name">{{$suite.Name}}</span>
+    {{if gt $suite.Failed 0}}<span class="count count-failed">{{$suite.Failed}}</span>{{end}}
+  </button>
+  {{end}}
+</nav>
+
+<main>
+  <div class="view active" id="view-overview">
+    <h2>Overview</h2>
+
+    <section class="summary">
+      <span>Total: {{.Overview.Total}}</span>
+      <span>Passed: {{.Overview.Passed}}</span>
+      <span>Failed: {{.Overview.Failed}}</span>
+      <span>Skipped: {{.Overview.Skipped}}</span>
+    </section>
+
+    <section class="suites-overview">
+      <h3>Suites</h3>
+      <table>
+        <thead><tr><th>Suite</th><th>Total</th><th>Passed</th><th>Failed</th><th>Skipped</th></tr></thead>
+        <tbody>
+          {{range $i, $suite := .Suites}}
+          <tr class="suite-row{{if gt $suite.Failed 0}} has-failures{{end}}" data-view="view-suite-{{$i}}">
+            <td>{{$suite.Name}}</td>
+            <td>{{$suite.Total}}</td>
+            <td>{{$suite.Passed}}</td>
+            <td class="col-failed">{{$suite.Failed}}</td>
+            <td>{{$suite.Skipped}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="tests">
+      {{template "testsHeader" "All Tests"}}
+      {{template "testControls"}}
+      <div class="test-list">
+        {{range .Overview.Tests}}
+        {{template "testItem" .}}
+        {{end}}
+      </div>
+    </section>
+  </div>
+
+  {{range $i, $suite := .Suites}}
+  <div class="view" id="view-suite-{{$i}}">
+    <h2>{{$suite.Name}}</h2>
+
+    <section class="summary">
+      <span>Total: {{$suite.Total}}</span>
+      <span>Passed: {{$suite.Passed}}</span>
+      <span>Failed: {{$suite.Failed}}</span>
+      <span>Skipped: {{$suite.Skipped}}</span>
+    </section>
+
+    {{if $suite.Properties}}
+    <details class="properties">
+      <summary><span class="toggle">&#9656;</span> Properties</summary>
+      <table>
+        <thead><tr><th>Name</th><th>Value</th></tr></thead>
+        <tbody>
+          {{range $suite.Properties}}
+          <tr><td>{{.Name}}</td><td>{{.Value}}</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </details>
+    {{end}}
+
+    <section class="tests">
+      {{template "testsHeader" "Tests"}}
+      {{template "testControls"}}
+      <div class="test-list">
+        {{range $suite.Tests}}
+        {{template "testItem" .}}
+        {{end}}
+      </div>
+    </section>
+  </div>
+  {{end}}
+</main>
+
+<script>
+(function () {
+  var menu = document.getElementById("menu");
+  var overlay = document.getElementById("menu-overlay");
+  var toggle = document.getElementById("menu-toggle");
+
+  function openMenu() {
+    menu.classList.add("open");
+    overlay.classList.add("visible");
+    toggle.setAttribute("aria-expanded", "true");
+  }
+
+  function closeMenu() {
+    menu.classList.remove("open");
+    overlay.classList.remove("visible");
+    toggle.setAttribute("aria-expanded", "false");
+  }
+
+  toggle.addEventListener("click", function () {
+    if (menu.classList.contains("open")) {
+      closeMenu();
+    } else {
+      openMenu();
+    }
+  });
+
+  overlay.addEventListener("click", closeMenu);
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") closeMenu();
+  });
+
+  function switchView(id) {
+    document.querySelectorAll(".view").forEach(function (v) { v.classList.remove("active"); });
+    var target = document.getElementById(id);
+    if (target) target.classList.add("active");
+    document.querySelectorAll(".menu-item").forEach(function (b) {
+      b.classList.toggle("active", b.dataset.view === id);
+    });
+    window.scrollTo(0, 0);
+  }
+
+  document.querySelectorAll(".menu-item").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      switchView(btn.dataset.view);
+      closeMenu();
+    });
+  });
+
+  document.querySelectorAll(".suite-row").forEach(function (row) {
+    row.addEventListener("click", function () {
+      switchView(row.dataset.view);
+    });
+  });
+
+  function applySort(controls, btn, ascending) {
+    var key = btn.dataset.sort;
+
+    controls.querySelectorAll("button").forEach(function (b) {
+      if (b !== btn) delete b.dataset.dir;
+      b.classList.remove("active");
+    });
+    btn.dataset.dir = ascending ? "asc" : "desc";
+    btn.classList.add("active");
+
+    var list = controls.parentElement.querySelector(".test-list");
+    var items = Array.from(list.children);
+
+    items.sort(function (a, b) {
+      var av = a.dataset[key];
+      var bv = b.dataset[key];
+      if (key === "time") {
+        av = parseFloat(av);
+        bv = parseFloat(bv);
+      }
+      if (av < bv) return ascending ? -1 : 1;
+      if (av > bv) return ascending ? 1 : -1;
+      return 0;
+    });
+
+    items.forEach(function (item) { list.appendChild(item); });
+  }
+
+  document.querySelectorAll(".test-controls").forEach(function (controls) {
+    controls.querySelectorAll("button").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        applySort(controls, btn, btn.dataset.dir !== "asc");
+      });
+    });
+
+    // Default: sort by status ascending, which puts "failed" tests first.
+    var statusButton = controls.querySelector('button[data-sort="status"]');
+    if (statusButton) {
+      applySort(controls, statusButton, true);
+    }
+  });
+
+  document.querySelectorAll(".expand-controls").forEach(function (controls) {
+    var list = controls.closest(".tests").querySelector(".test-list");
+
+    controls.querySelectorAll("button").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var mode = btn.dataset.expand;
+        Array.from(list.children).forEach(function (item) {
+          if (mode === "all") {
+            item.open = true;
+          } else if (mode === "none") {
+            item.open = false;
+          } else if (mode === "failed") {
+            item.open = item.dataset.status === "failed";
+          }
+        });
+      });
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
