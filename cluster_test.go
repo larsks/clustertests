@@ -2,7 +2,6 @@ package cluster_tests
 
 import (
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
@@ -13,8 +12,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 const (
@@ -108,25 +105,6 @@ var _ = Describe("cluster health", func() {
 		Expect(unbound).To(BeEmpty(), "PersistentVolumeClaims not Bound: %s", strings.Join(unbound, ", "))
 	})
 })
-
-func kubernetesConfig() (*rest.Config, error) {
-	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
-		config, err := rest.InClusterConfig()
-		if err != nil {
-			return nil, fmt.Errorf("load in-cluster Kubernetes credentials: %w", err)
-		}
-		return config, nil
-	}
-
-	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		clientcmd.NewDefaultClientConfigLoadingRules(),
-		&clientcmd.ConfigOverrides{},
-	).ClientConfig()
-	if err != nil {
-		return nil, fmt.Errorf("load Kubernetes credentials from KUBECONFIG or the default kubeconfig: %w", err)
-	}
-	return config, nil
-}
 
 func nodeConditionStatus(node corev1.Node, conditionType corev1.NodeConditionType) (corev1.ConditionStatus, bool) {
 	for _, condition := range node.Status.Conditions {

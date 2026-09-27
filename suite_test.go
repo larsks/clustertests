@@ -2,6 +2,7 @@ package cluster_tests
 
 import (
 	"fmt"
+	"os"
 	"slices"
 	"testing"
 
@@ -12,6 +13,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 func TestKubernetesHealthChecks(t *testing.T) {
@@ -46,3 +49,22 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 		return
 	}
 })
+
+func kubernetesConfig() (*rest.Config, error) {
+	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+		config, err := rest.InClusterConfig()
+		if err != nil {
+			return nil, fmt.Errorf("load in-cluster Kubernetes credentials: %w", err)
+		}
+		return config, nil
+	}
+
+	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		clientcmd.NewDefaultClientConfigLoadingRules(),
+		&clientcmd.ConfigOverrides{},
+	).ClientConfig()
+	if err != nil {
+		return nil, fmt.Errorf("load Kubernetes credentials from KUBECONFIG or the default kubeconfig: %w", err)
+	}
+	return config, nil
+}
