@@ -2,7 +2,8 @@ package cluster_tests
 
 import (
 	"context"
-	"fmt"
+	"sort"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -75,9 +76,8 @@ func expectHealthySecretStores(
 		}
 	}
 
-	if len(problems) > 0 {
-		Fail(fmt.Sprintf("found not ready %s: %v", kind, problems))
-	}
+	sort.Strings(problems)
+	Expect(problems).To(BeEmpty(), "%s not ready: %s", kind, strings.Join(problems, ", "))
 }
 
 var _ = Describe("ExternalSecrestsOperator", Label("secrets"), func() {
@@ -143,8 +143,7 @@ var _ = Describe("ExternalSecrestsOperator", Label("secrets"), func() {
 				problems = append(problems, secret.Name)
 			}
 		}
-		if len(problems) > 0 {
-			Fail(fmt.Sprintf("found not ready external secrets: %v", problems))
-		}
+		sort.Strings(problems)
+		Expect(problems).To(BeEmpty(), "ExternalSecrets not ready: %s", strings.Join(problems, ", "))
 	})
 })

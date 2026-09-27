@@ -1,7 +1,8 @@
 package cluster_tests
 
 import (
-	"fmt"
+	"sort"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -71,8 +72,7 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 			}
 		}
 
-		if len(problems) > 0 {
-			Fail(fmt.Sprintf("found not ready certificates: %v", problems))
-		}
+		sort.Strings(problems)
+		Expect(problems).To(BeEmpty(), "Certificates not ready: %s", strings.Join(problems, ", "))
 	})
 })

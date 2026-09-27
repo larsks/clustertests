@@ -41,7 +41,7 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 		metav1.CreateOptions{},
 	)
 	if err != nil {
-		Fail(fmt.Sprintf("Kubernetes authentication check (oc whoami equivalent) failed; aborting suite before specs: %v", err))
+		Fail(fmt.Sprintf("Kubernetes authentication check failed; aborting suite before specs: %v", err))
 		return
 	}
 	if identity.Status.UserInfo.Username == "" || identity.Status.UserInfo.Username == "system:anonymous" || slices.Contains(identity.Status.UserInfo.Groups, "system:unauthenticated") {
