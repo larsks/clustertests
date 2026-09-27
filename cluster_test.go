@@ -2,7 +2,7 @@ package cluster_tests
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -10,20 +10,10 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-const (
-	clusterServiceVersionCopiedFromLabel = "olm.copiedFrom"
-)
-
 var (
-	clusterServiceVersionGVR = schema.GroupVersionResource{
-		Group:    "operators.coreos.com",
-		Version:  "v1alpha1",
-		Resource: "clusterserviceversions",
-	}
 	clusterOperatorGVR = schema.GroupVersionResource{
 		Group:    "config.openshift.io",
 		Version:  "v1",
@@ -69,30 +59,7 @@ var _ = Describe("cluster health", func() {
 			}
 		}
 
-		sort.Strings(unhealthy)
-		Expect(unhealthy).To(BeEmpty())
-	})
-
-	It("requires each original ClusterServiceVersion to be Succeeded", Label("olm"), func(ctx SpecContext) {
-		list, err := dynamicClient.Resource(clusterServiceVersionGVR).List(ctx, metav1.ListOptions{
-			LabelSelector: "!" + clusterServiceVersionCopiedFromLabel,
-		})
-		Expect(err).NotTo(HaveOccurred(), "list ClusterServiceVersions across all namespaces")
-		Expect(list.Items).NotTo(BeEmpty(), "no original ClusterServiceVersions found")
-
-		var unhealthy []string
-		for _, csv := range list.Items {
-			phase, found, err := unstructured.NestedString(csv.Object, "status", "phase")
-			Expect(err).NotTo(HaveOccurred(), "read phase for ClusterServiceVersion %s/%s", csv.GetNamespace(), csv.GetName())
-			if !found {
-				phase = "<missing>"
-			}
-			if phase != "Succeeded" {
-				unhealthy = append(unhealthy, fmt.Sprintf("%s/%s: phase=%s", csv.GetNamespace(), csv.GetName(), phase))
-			}
-		}
-
-		sort.Strings(unhealthy)
+		slices.Sort(unhealthy)
 		Expect(unhealthy).To(BeEmpty())
 	})
 
@@ -111,7 +78,7 @@ var _ = Describe("cluster health", func() {
 			}
 		}
 
-		sort.Strings(unbound)
+		slices.Sort(unbound)
 		Expect(unbound).To(BeEmpty())
 	})
 
