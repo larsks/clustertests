@@ -60,7 +60,7 @@ var _ = Describe("cluster health", func() {
 		}
 
 		sort.Strings(unhealthy)
-		Expect(unhealthy).To(BeEmpty(), "unhealthy nodes: %s", strings.Join(unhealthy, ", "))
+		Expect(unhealthy).To(BeEmpty())
 	})
 
 	It("requires each original ClusterServiceVersion to be Succeeded", Label("olm"), func(ctx SpecContext) {
@@ -83,7 +83,7 @@ var _ = Describe("cluster health", func() {
 		}
 
 		sort.Strings(unhealthy)
-		Expect(unhealthy).To(BeEmpty(), "ClusterServiceVersions not Succeeded: %s", strings.Join(unhealthy, ", "))
+		Expect(unhealthy).To(BeEmpty())
 	})
 
 	It("requires every PersistentVolumeClaim to be Bound", Label("storage"), func(ctx SpecContext) {
@@ -102,7 +102,7 @@ var _ = Describe("cluster health", func() {
 		}
 
 		sort.Strings(unbound)
-		Expect(unbound).To(BeEmpty(), "PersistentVolumeClaims not Bound: %s", strings.Join(unbound, ", "))
+		Expect(unbound).To(BeEmpty())
 	})
 })
 

@@ -36,7 +36,7 @@ var _ = Describe("NvidiaGpuOperator", Label("gpu"), func() {
 				missingProductLabel = append(missingProductLabel, node.Name)
 			}
 		}
-		Expect(missingProductLabel).To(BeEmpty(), "nodes missing nvidia.com/gpu.product: %v", missingProductLabel)
+		Expect(missingProductLabel).To(BeEmpty())
 	})
 
 	DescribeTable("has available deployment", func(ctx SpecContext, name string) {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -106,7 +105,7 @@ func expectAllReady(ctx context.Context, gvr schema.GroupVersionResource, condTy
 	}
 
 	slices.Sort(problems)
-	Expect(problems).To(BeEmpty(), "%s not %s: %s", gvr.Resource, condType, strings.Join(problems, "; "))
+	Expect(problems).To(BeEmpty())
 }
 
 // deploymentIsAvailable reports whether the specified deployment has an Available=True condition.
