@@ -1,12 +1,14 @@
 package cluster_tests
 
 import (
+	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -18,6 +20,11 @@ const (
 )
 
 var (
+	secretStoreGVR = schema.GroupVersionResource{
+		Group:    "external-secrets.io",
+		Version:  "v1",
+		Resource: "secretstores",
+	}
 	clusterSecretStoreGVR = schema.GroupVersionResource{
 		Group:    "external-secrets.io",
 		Version:  "v1",
@@ -30,6 +37,49 @@ var (
 	}
 )
 
+func expectHealthySecretStores(
+	ctx context.Context,
+	kind string,
+	list func(context.Context) (*unstructured.UnstructuredList, error),
+) {
+	GinkgoHelper()
+
+	stores, err := list(ctx)
+	Expect(err).NotTo(HaveOccurred(), "list %s", kind)
+
+	var problems []string
+	for _, item := range stores.Items {
+		statusFields, _, err := unstructured.NestedMap(item.Object, "status")
+		var status esv1.SecretStoreStatus
+		if err == nil {
+			err = runtime.DefaultUnstructuredConverter.FromUnstructured(statusFields, &status)
+		}
+		if err != nil {
+			problems = append(problems, item.GetName())
+			continue
+		}
+
+		ready := hasCondition(
+			status.Conditions,
+			esv1.SecretStoreReady,
+			corev1.ConditionTrue,
+			func(c esv1.SecretStoreStatusCondition) (
+				esv1.SecretStoreConditionType,
+				corev1.ConditionStatus,
+			) {
+				return c.Type, c.Status
+			},
+		)
+		if !ready {
+			problems = append(problems, item.GetName())
+		}
+	}
+
+	if len(problems) > 0 {
+		Fail(fmt.Sprintf("found not ready %s: %v", kind, problems))
+	}
+}
+
 var _ = Describe("ExternalSecrestsOperator", Label("secrets"), func() {
 	DescribeTable("has available deployment", func(ctx SpecContext, name string) {
 		deploymentIsAvailableByName(ctx, externalSecretsNamespace, name)
@@ -41,38 +91,25 @@ var _ = Describe("ExternalSecrestsOperator", Label("secrets"), func() {
 	)
 
 	It("has healthy ClusterSecretStores", func(ctx SpecContext) {
-		stores, err := dynamicClient.Resource(clusterSecretStoreGVR).
-			List(ctx, metav1.ListOptions{})
-		Expect(err).NotTo(HaveOccurred(), "list ClusterSecretStores")
+		expectHealthySecretStores(
+			ctx,
+			"ClusterSecretStores",
+			func(ctx context.Context) (*unstructured.UnstructuredList, error) {
+				return dynamicClient.Resource(clusterSecretStoreGVR).List(ctx, metav1.ListOptions{})
+			},
+		)
+	})
 
-		var problems []string
-		for _, item := range stores.Items {
-			var store esv1.ClusterSecretStore
-			if err := runtime.DefaultUnstructuredConverter.FromUnstructured(item.Object, &store); err != nil {
-				problems = append(problems, item.GetName())
-				continue
-			}
-
-			ready := hasCondition(
-				store.Status.Conditions,
-				esv1.SecretStoreReady,
-				corev1.ConditionTrue,
-				func(c esv1.SecretStoreStatusCondition) (
-					esv1.SecretStoreConditionType,
-					corev1.ConditionStatus,
-				) {
-					return c.Type, c.Status
-				},
-			)
-
-			if !ready {
-				problems = append(problems, store.Name)
-			}
-		}
-
-		if len(problems) > 0 {
-			Fail(fmt.Sprintf("found not ready ClusterSecretStores: %v", problems))
-		}
+	It("has healthy SecretStores", func(ctx SpecContext) {
+		expectHealthySecretStores(
+			ctx,
+			"SecretStores",
+			func(ctx context.Context) (*unstructured.UnstructuredList, error) {
+				return dynamicClient.Resource(secretStoreGVR).
+					Namespace(metav1.NamespaceAll).
+					List(ctx, metav1.ListOptions{})
+			},
+		)
 	})
 
 	It("has healthy external secrets", func(ctx SpecContext) {
