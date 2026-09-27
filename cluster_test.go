@@ -27,20 +27,25 @@ var (
 )
 
 var _ = Describe("cluster health", func() {
-	It("requires every node to be Ready and free of resource pressure", Label("nodes"), func(ctx SpecContext) {
+	It("requires every node to be schedulable, Ready, and free of resource pressure", Label("nodes"), func(ctx SpecContext) {
 		nodes, err := coreClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 		Expect(err).NotTo(HaveOccurred(), "list nodes")
+		Expect(nodes.Items).NotTo(BeEmpty(), "no nodes found")
 
-		var unhealthy []string
+		var problems []string
 		for _, node := range nodes.Items {
-			var problems []string
+			var issues []string
+
+			if node.Spec.Unschedulable {
+				issues = append(issues, "Unschedulable")
+			}
 
 			readyStatus, hasReadyCondition := nodeConditionStatus(node, corev1.NodeReady)
 			if !hasReadyCondition || readyStatus != corev1.ConditionTrue {
 				if !hasReadyCondition {
 					readyStatus = "<missing>"
 				}
-				problems = append(problems, fmt.Sprintf("Ready=%s", readyStatus))
+				issues = append(issues, fmt.Sprintf("Ready=%s", readyStatus))
 			}
 
 			for _, pressureType := range []corev1.NodeConditionType{
@@ -50,36 +55,36 @@ var _ = Describe("cluster health", func() {
 			} {
 				status, exists := nodeConditionStatus(node, pressureType)
 				if exists && status == corev1.ConditionTrue {
-					problems = append(problems, fmt.Sprintf("%s=True", pressureType))
+					issues = append(issues, fmt.Sprintf("%s=True", pressureType))
 				}
 			}
 
-			if len(problems) > 0 {
-				unhealthy = append(unhealthy, fmt.Sprintf("%s (%s)", node.Name, strings.Join(problems, ", ")))
+			if len(issues) > 0 {
+				problems = append(problems, fmt.Sprintf("%s (%s)", node.Name, strings.Join(issues, ", ")))
 			}
 		}
 
-		slices.Sort(unhealthy)
-		Expect(unhealthy).To(BeEmpty())
+		slices.Sort(problems)
+		Expect(problems).To(BeEmpty())
 	})
 
 	It("requires every PersistentVolumeClaim to be Bound", Label("storage"), func(ctx SpecContext) {
 		claims, err := coreClient.CoreV1().PersistentVolumeClaims(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 		Expect(err).NotTo(HaveOccurred(), "list PersistentVolumeClaims across all namespaces")
 
-		var unbound []string
+		var problems []string
 		for _, claim := range claims.Items {
 			if claim.Status.Phase != corev1.ClaimBound {
 				phase := string(claim.Status.Phase)
 				if phase == "" {
 					phase = "<missing>"
 				}
-				unbound = append(unbound, fmt.Sprintf("%s/%s: phase=%s", claim.Namespace, claim.Name, phase))
+				problems = append(problems, fmt.Sprintf("%s/%s: phase=%s", claim.Namespace, claim.Name, phase))
 			}
 		}
 
-		slices.Sort(unbound)
-		Expect(unbound).To(BeEmpty())
+		slices.Sort(problems)
+		Expect(problems).To(BeEmpty())
 	})
 
 	It("requires every ClusterOperator to be Available and not Degraded", Label("cluster-operators"), func(ctx SpecContext) {

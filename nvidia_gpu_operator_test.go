@@ -45,13 +45,13 @@ var _ = Describe("NvidiaGpuOperator", Label("gpu"), func() {
 	})
 
 	It("has a gpu.product label on every node with gpu.present=true", func(ctx SpecContext) {
-		var missingProductLabel []string
+		var problems []string
 		for _, node := range gpuNodes(ctx) {
 			if _, found := node.Labels["nvidia.com/gpu.product"]; !found {
-				missingProductLabel = append(missingProductLabel, node.Name)
+				problems = append(problems, node.Name)
 			}
 		}
-		Expect(missingProductLabel).To(BeEmpty())
+		Expect(problems).To(BeEmpty())
 	})
 
 	DescribeTable("has available deployment", func(ctx SpecContext, name string) {
