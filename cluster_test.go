@@ -88,13 +88,15 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 		var problems []string
 		err := listClaims.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
 			claim := obj.(*corev1.PersistentVolumeClaim)
-			if claim.Status.Phase != corev1.ClaimBound {
-				phase := string(claim.Status.Phase)
-				if phase == "" {
-					phase = "<missing>"
-				}
-				problems = append(problems, fmt.Sprintf("%s/%s: phase=%s", claim.Namespace, claim.Name, phase))
+			if claim.Status.Phase == corev1.ClaimBound || pvcAwaitingFirstConsumer(ctx, claim) {
+				return nil
 			}
+
+			phase := string(claim.Status.Phase)
+			if phase == "" {
+				phase = "<missing>"
+			}
+			problems = append(problems, fmt.Sprintf("%s/%s: phase=%s", claim.Namespace, claim.Name, phase))
 			return nil
 		})
 		Expect(err).NotTo(HaveOccurred(), "list PersistentVolumeClaims across all namespaces")
@@ -222,4 +224,30 @@ func nodeConditionStatus(node corev1.Node, conditionType corev1.NodeConditionTyp
 		}
 	}
 	return "", false
+}
+
+// pvcSelectedNodeAnnotation is set by the scheduler on a PVC once it has
+// scheduled a pod that consumes it, to trigger topology-aware provisioning.
+// Its presence is what tells a WaitForFirstConsumer PVC that's still waiting
+// for a consumer (expected) apart from one whose consumer already showed up
+// and provisioning is stuck (a real problem).
+const pvcSelectedNodeAnnotation = "volume.kubernetes.io/selected-node"
+
+// pvcAwaitingFirstConsumer reports whether claim's non-Bound phase is the
+// ordinary WaitForFirstConsumer wait rather than a stuck binding: its
+// StorageClass defers binding until a consumer pod is scheduled, and no
+// consumer has been scheduled against it yet.
+func pvcAwaitingFirstConsumer(ctx context.Context, claim *corev1.PersistentVolumeClaim) bool {
+	GinkgoHelper()
+
+	className := defaultStorageClassName(ctx)
+	if claim.Spec.StorageClassName != nil {
+		className = *claim.Spec.StorageClassName
+	}
+	if className == "" || !storageClassIsWaitForFirstConsumer(ctx, className) {
+		return false
+	}
+
+	_, selected := claim.Annotations[pvcSelectedNodeAnnotation]
+	return !selected
 }

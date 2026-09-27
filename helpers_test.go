@@ -11,6 +11,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -104,6 +105,58 @@ func nodesMatching(ctx context.Context, selector labels.Selector) []corev1.Node 
 		}
 	}
 	return matched
+}
+
+// cachedStorageClasses holds every StorageClass in the cluster, fetched once
+// per test process. A nil value means the fetch hasn't happened yet.
+// StorageClasses, unlike pods, are few enough in any real cluster that a
+// single unpaged List is fine.
+var cachedStorageClasses *[]storagev1.StorageClass
+
+// allStorageClasses returns every StorageClass in the cluster, fetching and
+// caching the full list on first use.
+func allStorageClasses(ctx context.Context) []storagev1.StorageClass {
+	GinkgoHelper()
+
+	if cachedStorageClasses == nil {
+		classes, err := coreClient.StorageV1().StorageClasses().List(ctx, metav1.ListOptions{})
+		Expect(err).NotTo(HaveOccurred(), "list StorageClasses")
+		cachedStorageClasses = &classes.Items
+	}
+	return *cachedStorageClasses
+}
+
+// defaultStorageClassName returns the name of the cluster's default
+// StorageClass, or "" if none is marked default. A PersistentVolumeClaim
+// with no StorageClassName of its own resolves to this one.
+func defaultStorageClassName(ctx context.Context) string {
+	GinkgoHelper()
+
+	for _, class := range allStorageClasses(ctx) {
+		if class.Annotations["storageclass.kubernetes.io/is-default-class"] == "true" {
+			return class.Name
+		}
+	}
+	return ""
+}
+
+// storageClassIsWaitForFirstConsumer reports whether the named StorageClass
+// has VolumeBindingMode: WaitForFirstConsumer, meaning a PVC on this class is
+// deliberately left Pending until a pod that uses it is scheduled, rather
+// than being bound as soon as it's created. A StorageClass with no
+// VolumeBindingMode set, or no StorageClass by this name at all, reports
+// false: VolumeBindingImmediate is both the API's default when the field is
+// omitted and the correct answer when the class can't be found.
+func storageClassIsWaitForFirstConsumer(ctx context.Context, name string) bool {
+	GinkgoHelper()
+
+	for _, class := range allStorageClasses(ctx) {
+		if class.Name == name {
+			return class.VolumeBindingMode != nil &&
+				*class.VolumeBindingMode == storagev1.VolumeBindingWaitForFirstConsumer
+		}
+	}
+	return false
 }
 
 // resourceKindExists caches whether the API server serves each resource type
