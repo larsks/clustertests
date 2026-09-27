@@ -1,10 +1,12 @@
 package cluster_tests
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 )
@@ -13,25 +15,38 @@ const (
 	nvidiaGpuOperatorNamespace = "nvidia-gpu-operator"
 )
 
-var _ = Describe("NvidiaGpuOperator", Label("gpu"), func() {
-	var labelSelector = labels.SelectorFromSet(labels.Set{
-		"nvidia.com/gpu.present": "true",
-	}).String()
+// gpuNodeLabelSelector matches nodes labeled as having a GPU.
+var gpuNodeLabelSelector = labels.SelectorFromSet(labels.Set{
+	"nvidia.com/gpu.present": "true",
+}).String()
 
-	var gpuNodes []v1.Node
+// cachedGPUNodes holds the result of the first successful GPU node lookup.
+// A nil value means the lookup has not happened yet.
+var cachedGPUNodes *[]corev1.Node
 
-	BeforeEach(func(ctx SpecContext) {
-		nodes, err := coreClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
+// gpuNodes returns the nodes labeled as having a GPU. The list is fetched
+// once per test process and reused by every spec.
+func gpuNodes(ctx context.Context) []corev1.Node {
+	GinkgoHelper()
+
+	if cachedGPUNodes == nil {
+		nodes, err := coreClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{LabelSelector: gpuNodeLabelSelector})
 		Expect(err).NotTo(HaveOccurred(), "list GPU nodes")
-		if len(nodes.Items) == 0 {
+		cachedGPUNodes = &nodes.Items
+	}
+	return *cachedGPUNodes
+}
+
+var _ = Describe("NvidiaGpuOperator", Label("gpu"), func() {
+	BeforeEach(func(ctx SpecContext) {
+		if len(gpuNodes(ctx)) == 0 {
 			Skip("no gpu nodes")
 		}
-		gpuNodes = nodes.Items
 	})
 
 	It("has a gpu.product label on every node with gpu.present=true", func(ctx SpecContext) {
 		var missingProductLabel []string
-		for _, node := range gpuNodes {
+		for _, node := range gpuNodes(ctx) {
 			if _, found := node.Labels["nvidia.com/gpu.product"]; !found {
 				missingProductLabel = append(missingProductLabel, node.Name)
 			}

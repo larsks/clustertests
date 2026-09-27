@@ -26,14 +26,31 @@ var (
 	coreClient    kubernetes.Interface
 )
 
+// namespaceExists caches whether each namespace exists so that the guard
+// runs before every spec without repeating the API call. Only definitive
+// answers are cached; a failed lookup fails the spec and is retried by the
+// next one. Ginkgo runs parallel specs in separate processes, so no locking
+// is needed.
+var namespaceExists = map[string]bool{}
+
+// skipIfNamespaceDoesNotExist skips the current spec if the namespace does not
+// exist. The answer is looked up once per test process.
 func skipIfNamespaceDoesNotExist(ctx context.Context, namespace string) {
 	GinkgoHelper()
 
-	_, err := coreClient.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
+	exists, cached := namespaceExists[namespace]
+	if !cached {
+		_, err := coreClient.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
+		if err != nil && !apierrors.IsNotFound(err) {
+			Expect(err).NotTo(HaveOccurred(), "get namespace %q", namespace)
+		}
+		exists = err == nil
+		namespaceExists[namespace] = exists
+	}
+
+	if !exists {
 		Skip(fmt.Sprintf("namespace %q does not exist", namespace))
 	}
-	Expect(err).NotTo(HaveOccurred(), "get namespace %q", namespace)
 }
 
 // conditionReady is the name of the standard readiness condition used by
