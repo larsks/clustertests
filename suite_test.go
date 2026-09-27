@@ -1,6 +1,7 @@
 package clustertests
 
 import (
+	"flag"
 	"fmt"
 	"testing"
 	"time"
@@ -19,6 +20,13 @@ import (
 // clientTimeout bounds every API request so a hung API server fails the spec
 // instead of blocking until the suite timeout.
 const clientTimeout = 30 * time.Second
+
+// impersonateAs, like `kubectl --as`, lets someone with plain cluster-reader
+// access run the suite with elevated privileges (for example
+// "system:admin") via Kubernetes impersonation, when their identity is
+// granted the "impersonate" verb for that user. This means running with
+// admin privileges never requires switching KUBECONFIG to a separate file.
+var impersonateAs = flag.String("as", "", "impersonate this user when connecting to the cluster (like kubectl --as)")
 
 func TestKubernetesHealthChecks(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -65,5 +73,8 @@ func kubernetesConfig() (*rest.Config, error) {
 		return nil, fmt.Errorf("load Kubernetes credentials from KUBECONFIG, the default kubeconfig, or in-cluster service account: %w", err)
 	}
 	config.Timeout = clientTimeout
+	if *impersonateAs != "" {
+		config.Impersonate.UserName = *impersonateAs
+	}
 	return config, nil
 }
