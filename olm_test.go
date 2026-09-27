@@ -33,6 +33,11 @@ var (
 		Version:  "v1alpha1",
 		Resource: "installplans",
 	}
+	operatorGroupGVR = schema.GroupVersionResource{
+		Group:    "operators.coreos.com",
+		Version:  "v1",
+		Resource: "operatorgroups",
+	}
 
 	// subscriptionErrorConditions are Subscription condition types that
 	// OLM only sets when something is wrong; a healthy Subscription simply
@@ -123,6 +128,28 @@ var _ = Describe("OLM", Label("olm"), func() {
 			return nil
 		})
 		Expect(err).NotTo(HaveOccurred(), "list InstallPlans across all namespaces")
+
+		slices.Sort(problems)
+		Expect(problems).To(BeEmpty())
+	})
+
+	// More than one OperatorGroup in a namespace puts it in an unusable
+	// state: OLM can't determine which OperatorGroup a CSV there belongs to,
+	// so it fails every CSV in that namespace instead of picking one.
+	It("requires every namespace to have at most one OperatorGroup", func(ctx SpecContext) {
+		counts := map[string]int{}
+		err := eachResource(ctx, operatorGroupGVR, metav1.ListOptions{}, func(obj *unstructured.Unstructured) error {
+			counts[obj.GetNamespace()]++
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "list OperatorGroups across all namespaces")
+
+		var problems []string
+		for namespace, count := range counts {
+			if count > 1 {
+				problems = append(problems, fmt.Sprintf("%s: %d OperatorGroups", namespace, count))
+			}
+		}
 
 		slices.Sort(problems)
 		Expect(problems).To(BeEmpty())
