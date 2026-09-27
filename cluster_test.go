@@ -12,8 +12,15 @@ import (
 	certificatesv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/tools/pager"
 )
+
+// podListPageSize bounds how many pods are fetched per page when listing
+// pods across all namespaces, so the check doesn't pull the entire cluster's
+// pod list into memory at once on a large cluster.
+const podListPageSize = 500
 
 var (
 	clusterOperatorGVR = schema.GroupVersionResource{
@@ -157,11 +164,14 @@ var _ = Describe("cluster health", func() {
 	It("requires no pods to be Failed, crash-looping, or unable to pull their image", Label("pods"), func(ctx SpecContext) {
 		badWaitingReasons := []string{"CrashLoopBackOff", "ImagePullBackOff", "ErrImagePull"}
 
-		pods, err := coreClient.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-		Expect(err).NotTo(HaveOccurred(), "list pods across all namespaces")
+		listPods := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+			return coreClient.CoreV1().Pods(metav1.NamespaceAll).List(ctx, opts)
+		})
+		listPods.PageSize = podListPageSize
 
 		var problems []string
-		for _, pod := range pods.Items {
+		err := listPods.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
+			pod := obj.(*corev1.Pod)
 			id := pod.Namespace + "/" + pod.Name
 
 			if pod.Status.Phase == corev1.PodFailed {
@@ -170,7 +180,7 @@ var _ = Describe("cluster health", func() {
 					reason = "<missing>"
 				}
 				problems = append(problems, fmt.Sprintf("%s: phase=Failed (%s)", id, reason))
-				continue
+				return nil
 			}
 
 			containerStatuses := append(
@@ -188,7 +198,9 @@ var _ = Describe("cluster health", func() {
 					))
 				}
 			}
-		}
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "list pods across all namespaces")
 
 		slices.Sort(problems)
 		Expect(problems).To(BeEmpty())
