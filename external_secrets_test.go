@@ -20,8 +20,13 @@ const (
 var (
 	clusterSecretStoreGVR = schema.GroupVersionResource{
 		Group:    "external-secrets.io",
-		Version:  "v1", // use a version served by your cluster
+		Version:  "v1",
 		Resource: "clustersecretstores",
+	}
+	externalSecretGVSR = schema.GroupVersionResource{
+		Group:    "external-secrets.io",
+		Version:  "v1",
+		Resource: "externalsecrets",
 	}
 )
 
@@ -67,6 +72,38 @@ var _ = Describe("ExternalSecrestsOperator", Label("secrets"), func() {
 
 		if len(problems) > 0 {
 			Fail(fmt.Sprintf("found not ready ClusterSecretStores: %v", problems))
+		}
+	})
+
+	It("has healthy external secrets", func(ctx SpecContext) {
+		secrets, err := dynamicClient.Resource(externalSecretGVSR).
+			List(ctx, metav1.ListOptions{})
+		Expect(err).NotTo(HaveOccurred(), "list external secrets")
+
+		var problems []string
+		for _, item := range secrets.Items {
+			var secret esv1.ExternalSecret
+			if err := runtime.DefaultUnstructuredConverter.FromUnstructured(item.Object, &secret); err != nil {
+				problems = append(problems, item.GetName())
+				continue
+			}
+			ready := hasCondition(
+				secret.Status.Conditions,
+				esv1.ExternalSecretReady,
+				corev1.ConditionTrue,
+				func(c esv1.ExternalSecretStatusCondition) (
+					esv1.ExternalSecretConditionType,
+					corev1.ConditionStatus,
+				) {
+					return c.Type, c.Status
+				},
+			)
+			if !ready {
+				problems = append(problems, secret.Name)
+			}
+		}
+		if len(problems) > 0 {
+			Fail(fmt.Sprintf("found not ready external secrets: %v", problems))
 		}
 	})
 })
