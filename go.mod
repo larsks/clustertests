@@ -1,4 +1,4 @@
-module github.com/larsks/oac-apps/tests/ginkgo
+module github.com/larsks/clustertests
 
 go 1.26.6
 
