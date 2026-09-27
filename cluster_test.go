@@ -104,6 +104,8 @@ var _ = Describe("cluster health", func() {
 	})
 
 	It("requires every ClusterOperator to be Available and not Degraded", Label("cluster-operators"), func(ctx SpecContext) {
+		skipIfResourceKindDoesNotExist(clusterOperatorGVR)
+
 		checked := expectConditions(ctx, clusterOperatorGVR,
 			conditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
 			conditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
@@ -112,6 +114,8 @@ var _ = Describe("cluster health", func() {
 	})
 
 	It("requires ClusterVersion to be Available and not Failing", Label("cluster-version"), func(ctx SpecContext) {
+		skipIfResourceKindDoesNotExist(clusterVersionGVR)
+
 		checked := expectConditions(ctx, clusterVersionGVR,
 			conditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
 			conditionExpectation{Type: "Failing", Status: metav1.ConditionFalse},
