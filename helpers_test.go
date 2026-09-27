@@ -3,16 +3,21 @@ package cluster_tests
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 )
@@ -32,25 +37,80 @@ func skipIfNamespaceDoesNotExist(ctx context.Context, namespace string) {
 	Expect(err).NotTo(HaveOccurred(), "get namespace %q", namespace)
 }
 
-// hasCondition reports whether conditions contains the requested type and status.
-// fieldValues extracts the type and status from each condition.
-func hasCondition[C any, T ~string, S ~string](
-	conditions []C,
-	conditionType T,
-	status S,
-	fieldValues func(C) (T, S),
-) bool {
-	for _, condition := range conditions {
-		gotType, gotStatus := fieldValues(condition)
-		if gotType == conditionType && gotStatus == status {
-			return true
+// conditionReady is the name of the standard readiness condition used by
+// Certificates, SecretStores, ExternalSecrets, and most other CRDs.
+const conditionReady = "Ready"
+
+// conditionsOf decodes status.conditions from any resource into
+// metav1.Condition. Projects define their own condition types, but they all
+// serialize to the same JSON shape, so this gives a single type for checking
+// conditions regardless of which project owns the resource.
+func conditionsOf(obj *unstructured.Unstructured) ([]metav1.Condition, error) {
+	raw, _, err := unstructured.NestedSlice(obj.Object, "status", "conditions")
+	if err != nil {
+		return nil, err
+	}
+
+	conditions := make([]metav1.Condition, len(raw))
+	for i, item := range raw {
+		fields, ok := item.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("status.conditions[%d] is %T, not an object", i, item)
+		}
+		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(fields, &conditions[i]); err != nil {
+			return nil, fmt.Errorf("status.conditions[%d]: %w", i, err)
 		}
 	}
-	return false
+	return conditions, nil
+}
+
+// expectAllReady lists every resource of the given type across all namespaces
+// and fails unless each has a condition of type condType with status True.
+// Offenders are reported as namespace/name along with the condition's reason
+// and message. A condition whose observedGeneration is older than the
+// resource's generation is treated as stale.
+func expectAllReady(ctx context.Context, gvr schema.GroupVersionResource, condType string) {
+	GinkgoHelper()
+
+	list, err := dynamicClient.Resource(gvr).List(ctx, metav1.ListOptions{})
+	Expect(err).NotTo(HaveOccurred(), "list %s", gvr.Resource)
+
+	var problems []string
+	for i := range list.Items {
+		obj := &list.Items[i]
+		id := obj.GetName()
+		if namespace := obj.GetNamespace(); namespace != "" {
+			id = namespace + "/" + id
+		}
+
+		conditions, err := conditionsOf(obj)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("%s: %v", id, err))
+			continue
+		}
+
+		condition := apimeta.FindStatusCondition(conditions, condType)
+		switch {
+		case condition == nil:
+			problems = append(problems, fmt.Sprintf("%s: no %s condition", id, condType))
+		case condition.Status != metav1.ConditionTrue:
+			problems = append(problems, fmt.Sprintf(
+				"%s: %s=%s (%s: %s)", id, condType, condition.Status, condition.Reason, condition.Message,
+			))
+		case condition.ObservedGeneration != 0 && condition.ObservedGeneration < obj.GetGeneration():
+			problems = append(problems, fmt.Sprintf(
+				"%s: %s is stale (observed generation %d, current generation %d)",
+				id, condType, condition.ObservedGeneration, obj.GetGeneration(),
+			))
+		}
+	}
+
+	slices.Sort(problems)
+	Expect(problems).To(BeEmpty(), "%s not %s: %s", gvr.Resource, condType, strings.Join(problems, "; "))
 }
 
 // deploymentIsAvailable reports whether the specified deployment has an Available=True condition.
-func deploymentIsAvailable(deployment *v1.Deployment) {
+func deploymentIsAvailable(deployment *appsv1.Deployment) {
 	GinkgoHelper()
 	var available bool
 	for _, condition := range deployment.Status.Conditions {

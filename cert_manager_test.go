@@ -1,19 +1,9 @@
 package cluster_tests
 
 import (
-	"sort"
-	"strings"
-
 	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-
-	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
-	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 )
 
 const (
@@ -42,37 +32,6 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 	)
 
 	It("has healthy certificates", func(ctx SpecContext) {
-		certificates, err := dynamicClient.Resource(certificateGVR).
-			Namespace(metav1.NamespaceAll).
-			List(ctx, metav1.ListOptions{})
-		Expect(err).NotTo(HaveOccurred(), "list certificates")
-
-		var problems []string
-		for _, item := range certificates.Items {
-			statusFields, _, err := unstructured.NestedMap(item.Object, "status")
-			var status cmapi.CertificateStatus
-			if err == nil {
-				err = runtime.DefaultUnstructuredConverter.FromUnstructured(statusFields, &status)
-			}
-			if err != nil {
-				problems = append(problems, item.GetName())
-				continue
-			}
-
-			ready := hasCondition(
-				status.Conditions,
-				cmapi.CertificateConditionReady,
-				cmmeta.ConditionTrue,
-				func(c cmapi.CertificateCondition) (cmapi.CertificateConditionType, cmmeta.ConditionStatus) {
-					return c.Type, c.Status
-				},
-			)
-			if !ready {
-				problems = append(problems, item.GetName())
-			}
-		}
-
-		sort.Strings(problems)
-		Expect(problems).To(BeEmpty(), "Certificates not ready: %s", strings.Join(problems, ", "))
+		expectAllReady(ctx, certificateGVR, conditionReady)
 	})
 })
