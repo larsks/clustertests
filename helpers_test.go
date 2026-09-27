@@ -94,6 +94,16 @@ func resourceID(obj *unstructured.Unstructured) string {
 	return obj.GetName()
 }
 
+// objectID is resourceID for a typed Kubernetes object instead of an
+// unstructured one. Any *appsv1.Deployment, *appsv1.StatefulSet or
+// *appsv1.DaemonSet satisfies metav1.Object through its embedded ObjectMeta.
+func objectID(obj metav1.Object) string {
+	if namespace := obj.GetNamespace(); namespace != "" {
+		return namespace + "/" + obj.GetName()
+	}
+	return obj.GetName()
+}
+
 // conditionsOf decodes status.conditions from any resource into
 // metav1.Condition. Projects define their own condition types, but they all
 // serialize to the same JSON shape, so this gives a single type for checking
@@ -178,33 +188,53 @@ func expectAllReady(ctx context.Context, gvr schema.GroupVersionResource, condTy
 	expectConditions(ctx, gvr, conditionExpectation{Type: condType, Status: metav1.ConditionTrue})
 }
 
+// deploymentCondition returns the named condition, or nil if the deployment
+// doesn't report one.
+func deploymentCondition(
+	deployment *appsv1.Deployment, conditionType appsv1.DeploymentConditionType,
+) *appsv1.DeploymentCondition {
+	for i, condition := range deployment.Status.Conditions {
+		if condition.Type == conditionType {
+			return &deployment.Status.Conditions[i]
+		}
+	}
+	return nil
+}
+
 // deploymentIsAvailable asserts whether the specified deployment has an Available=True condition.
 func deploymentIsAvailable(deployment *appsv1.Deployment) {
 	GinkgoHelper()
 
+	id := objectID(deployment)
+
 	Expect(deployment.Spec.Replicas).ToNot(BeNil())
 	desired := *deployment.Spec.Replicas
-	Expect(desired).To(BeNumerically(">", 0), "deployment %q is scaled to 0 replicas", deployment.Name)
+	Expect(desired).To(BeNumerically(">", 0), "deployment %s is scaled to 0 replicas", id)
 
-	var available bool
-	for _, condition := range deployment.Status.Conditions {
-		if condition.Type == appsv1.DeploymentAvailable {
-			Expect(condition.Status).
-				To(Equal(corev1.ConditionTrue), "deployment %q is not available", deployment.Name)
-			available = true
-			break
-		}
-	}
+	available := deploymentCondition(deployment, appsv1.DeploymentAvailable)
+	Expect(available).NotTo(BeNil(), "deployment %s has no Available condition", id)
+	Expect(available.Status).To(Equal(corev1.ConditionTrue), "deployment %s is not available", id)
 
-	if !available {
-		Fail(fmt.Sprintf("deployment %q has no Available condition", deployment.Name))
+	// Progressing=True is the normal steady state once a rollout has ever
+	// succeeded; it only turns False, with this reason, when a rollout has
+	// been stuck longer than spec.progressDeadlineSeconds (600s by default).
+	if progressing := deploymentCondition(deployment, appsv1.DeploymentProgressing); progressing != nil {
+		stuck := progressing.Status == corev1.ConditionFalse && progressing.Reason == "ProgressDeadlineExceeded"
+		Expect(stuck).To(BeFalse(), "deployment %s rollout is stuck: %s", id, progressing.Message)
 	}
 
 	Expect(deployment.Status.ObservedGeneration).To(
 		BeNumerically(">=", deployment.Generation),
+		"deployment %s status has not observed its current generation", id,
 	)
-	Expect(deployment.Status.AvailableReplicas).To(Equal(desired))
-	Expect(deployment.Status.UpdatedReplicas).To(Equal(desired))
+	Expect(deployment.Status.AvailableReplicas).To(
+		Equal(desired),
+		"deployment %s available replicas", id,
+	)
+	Expect(deployment.Status.UpdatedReplicas).To(
+		Equal(desired),
+		"deployment %s updated replicas", id,
+	)
 }
 
 func deploymentIsAvailableByName(ctx context.Context, namespace, name string) {
@@ -216,19 +246,22 @@ func deploymentIsAvailableByName(ctx context.Context, namespace, name string) {
 
 func statefulSetIsAvailable(statefulSet *appsv1.StatefulSet) {
 	GinkgoHelper()
+
+	id := objectID(statefulSet)
+
 	Expect(statefulSet.Status.ObservedGeneration).To(
 		BeNumerically(">=", statefulSet.Generation),
-		"statefulset %q status has not observed its current generation", statefulSet.Name,
+		"statefulset %s status has not observed its current generation", id,
 	)
 	Expect(statefulSet.Spec.Replicas).NotTo(BeNil())
 	desired := *statefulSet.Spec.Replicas
 	Expect(statefulSet.Status.ReadyReplicas).To(
 		Equal(desired),
-		"statefulset %q ready replicas", statefulSet.Name,
+		"statefulset %s ready replicas", id,
 	)
 	Expect(statefulSet.Status.UpdatedReplicas).To(
 		Equal(desired),
-		"statefulset %q updated replicas", statefulSet.Name,
+		"statefulset %s updated replicas", id,
 	)
 }
 
@@ -244,17 +277,61 @@ func statefulSetIsAvailableByName(ctx context.Context, namespace, name string) {
 * daemonset matches the number of expected instances based on its
 * NodeSelector. We are explicitly trying to identify daemonsets that should be
 * scheduled on a set of nodes but are not because the nodes are tainted and the
-* daemonset pods are missing the appropriate tolerations.
+* daemonset pods are missing the appropriate tolerations: DesiredNumberScheduled
+* already excludes a taint-blocked node, so comparing it against our own count
+* of label-matching nodes is what catches that case.
+*
+* Two known limits, left as-is rather than "fixed" incorrectly:
+*   - This matches on NodeSelector only, not NodeAffinity. A DaemonSet that
+*     picks its nodes via NodeAffinity instead could be miscounted. None of
+*     the DaemonSets this suite currently checks do that (confirmed against a
+*     live NVIDIA GPU Operator install).
+*   - NotReady and cordoned (Unschedulable) nodes are deliberately still
+*     counted: the DaemonSet controller tolerates both by default, so a
+*     healthy DaemonSet's DesiredNumberScheduled includes them too. Excluding
+*     them here would cause false failures, not fix anything.
+*
+* A DaemonSet legitimately scoped to hardware that isn't present anywhere in
+* the cluster (for example nvidia-device-plugin-mps-control-daemon on a
+* cluster with no MPS-capable nodes) can correctly have
+* DesiredNumberScheduled, NumberAvailable and expected all at 0; that's not
+* itself treated as a failure.
  */
 func daemonsetIsAvailable(ctx context.Context, daemonset *appsv1.DaemonSet) {
 	GinkgoHelper()
+
+	id := objectID(daemonset)
+
 	selector := labels.Set(daemonset.Spec.Template.Spec.NodeSelector).AsSelector()
 	nodes, err := coreClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{LabelSelector: selector.String()})
-	Expect(err).NotTo(HaveOccurred())
+	Expect(err).NotTo(HaveOccurred(), "list nodes matching daemonset %s NodeSelector", id)
 	expected := len(nodes.Items)
 
-	Expect(daemonset.Status.NumberAvailable).To(Equal(daemonset.Status.DesiredNumberScheduled))
-	Expect(daemonset.Status.NumberAvailable).To(BeNumerically("==", expected))
+	Expect(daemonset.Status.ObservedGeneration).To(
+		BeNumerically(">=", daemonset.Generation),
+		"daemonset %s status has not observed its current generation", id,
+	)
+	Expect(daemonset.Status.NumberMisscheduled).To(
+		BeNumerically("==", 0),
+		"daemonset %s has pods running on nodes it shouldn't", id,
+	)
+	Expect(daemonset.Status.UpdatedNumberScheduled).To(
+		Equal(daemonset.Status.DesiredNumberScheduled),
+		"daemonset %s rollout is incomplete", id,
+	)
+	// NumberReady isn't checked separately: Available pods are a subset of
+	// Ready ones, so NumberAvailable == DesiredNumberScheduled below already
+	// implies NumberReady == DesiredNumberScheduled.
+	Expect(daemonset.Status.NumberAvailable).To(
+		Equal(daemonset.Status.DesiredNumberScheduled),
+		"daemonset %s is not fully available", id,
+	)
+	Expect(daemonset.Status.NumberAvailable).To(
+		BeNumerically("==", expected),
+		"daemonset %s available count does not match nodes selected by its NodeSelector "+
+			"(a mismatch here usually means a taint without a matching toleration)",
+		id,
+	)
 }
 
 func daemonsetIsAvailableByName(ctx context.Context, namespace, name string) {
