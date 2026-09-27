@@ -84,7 +84,7 @@ var _ = Describe("Portworx", Label("portworx"), func() {
 	It("has a healthy PureStorageCluster", func(ctx SpecContext) {
 		_, err := dynamicClient.Resource(purestorageClusterGVR).List(ctx, metav1.ListOptions{Limit: 1})
 		if apierrors.IsForbidden(err) {
-			Skip("insufficient privileges to list PureStorageCluster; rerun with an admin-privileged KUBECONFIG to include this check")
+			Skip("insufficient privileges to list PureStorageCluster; rerun with an admin privileges to include this check")
 		}
 		Expect(err).NotTo(HaveOccurred(), "list PureStorageClusters")
 
