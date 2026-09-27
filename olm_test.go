@@ -47,6 +47,10 @@ var (
 )
 
 var _ = Describe("OLM", Label("olm"), func() {
+	BeforeEach(func(ctx SpecContext) {
+		skipIfResourceKindDoesNotExist(subscriptionGVR)
+	})
+
 	It("requires each original ClusterServiceVersion to be Succeeded", func(ctx SpecContext) {
 		var problems []string
 		count := 0
