@@ -80,7 +80,7 @@ func expectHealthySecretStores(
 	Expect(problems).To(BeEmpty(), "%s not ready: %s", kind, strings.Join(problems, ", "))
 }
 
-var _ = Describe("ExternalSecrestsOperator", Label("secrets"), func() {
+var _ = Describe("ExternalSecretsOperator", Label("secrets"), func() {
 	BeforeEach(func(ctx SpecContext) {
 		skipIfNamespaceDoesNotExist(ctx, externalSecretsNamespace)
 	})
