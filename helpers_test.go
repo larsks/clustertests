@@ -164,19 +164,12 @@ func skipIfResourceKindDoesNotExist(gvr schema.GroupVersionResource) {
 // Certificates, SecretStores, ExternalSecrets, and most other CRDs.
 const conditionReady = "Ready"
 
-// resourceID returns namespace/name for namespaced resources and just the name
+// objectID returns namespace/name for namespaced resources and just the name
 // for cluster-scoped ones, so that same-named resources in different
-// namespaces can be told apart in failure messages.
-func resourceID(obj *unstructured.Unstructured) string {
-	if namespace := obj.GetNamespace(); namespace != "" {
-		return namespace + "/" + obj.GetName()
-	}
-	return obj.GetName()
-}
-
-// objectID is resourceID for a typed Kubernetes object instead of an
-// unstructured one. Any *appsv1.Deployment, *appsv1.StatefulSet or
-// *appsv1.DaemonSet satisfies metav1.Object through its embedded ObjectMeta.
+// namespaces can be told apart in failure messages. Any *appsv1.Deployment,
+// *appsv1.StatefulSet, *appsv1.DaemonSet, or *unstructured.Unstructured
+// satisfies metav1.Object, whether through an embedded ObjectMeta or its own
+// accessor methods.
 func objectID(obj metav1.Object) string {
 	if namespace := obj.GetNamespace(); namespace != "" {
 		return namespace + "/" + obj.GetName()
@@ -227,7 +220,7 @@ func expectConditions(ctx context.Context, gvr schema.GroupVersionResource, expe
 	count := 0
 	err := eachResource(ctx, gvr, metav1.ListOptions{}, func(obj *unstructured.Unstructured) error {
 		count++
-		id := resourceID(obj)
+		id := objectID(obj)
 
 		conditions, err := conditionsOf(obj)
 		if err != nil {

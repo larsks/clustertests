@@ -53,7 +53,7 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 		now := time.Now()
 		var problems []string
 		err := eachResource(ctx, certificateGVR, metav1.ListOptions{}, func(certificate *unstructured.Unstructured) error {
-			id := resourceID(certificate)
+			id := objectID(certificate)
 
 			notAfter, hasNotAfter, err := statusTime(certificate, "notAfter")
 			if err != nil {

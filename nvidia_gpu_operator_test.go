@@ -9,11 +9,21 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 const (
 	nvidiaGpuOperatorNamespace = "nvidia-gpu-operator"
 )
+
+// clusterPolicyGVR is used only to detect whether the NVIDIA GPU Operator is
+// installed on this cluster; the suite doesn't otherwise check ClusterPolicy
+// resources.
+var clusterPolicyGVR = schema.GroupVersionResource{
+	Group:    "nvidia.com",
+	Version:  "v1",
+	Resource: "clusterpolicies",
+}
 
 // gpuNodeSelector matches nodes labeled as having a GPU.
 var gpuNodeSelector = labels.SelectorFromSet(labels.Set{
@@ -29,9 +39,7 @@ func gpuNodes(ctx context.Context) []corev1.Node {
 
 var _ = Describe("NvidiaGpuOperator", Label("gpu"), func() {
 	BeforeEach(func(ctx SpecContext) {
-		if len(gpuNodes(ctx)) == 0 {
-			Skip("no gpu nodes")
-		}
+		skipIfResourceKindDoesNotExist(clusterPolicyGVR)
 	})
 
 	It("has a gpu.product label on every node with gpu.present=true", func(ctx SpecContext) {

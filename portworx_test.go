@@ -41,7 +41,7 @@ func expectPhase(ctx context.Context, gvr schema.GroupVersionResource, wantPhase
 	count := 0
 	err := eachResource(ctx, gvr, metav1.ListOptions{}, func(item *unstructured.Unstructured) error {
 		count++
-		id := resourceID(item)
+		id := objectID(item)
 
 		phase, found, err := unstructured.NestedString(item.Object, "status", "phase")
 		if err != nil {

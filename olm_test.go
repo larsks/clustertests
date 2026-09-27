@@ -58,7 +58,7 @@ var _ = Describe("OLM", Label("olm"), func() {
 			LabelSelector: "!" + clusterServiceVersionCopiedFromLabel,
 		}, func(csv *unstructured.Unstructured) error {
 			count++
-			id := resourceID(csv)
+			id := objectID(csv)
 			phase, found, err := unstructured.NestedString(csv.Object, "status", "phase")
 			if err != nil {
 				return fmt.Errorf("read phase for ClusterServiceVersion %s: %w", id, err)
@@ -81,7 +81,7 @@ var _ = Describe("OLM", Label("olm"), func() {
 	It("requires every Subscription to be free of catalog and install errors", func(ctx SpecContext) {
 		var problems []string
 		err := eachResource(ctx, subscriptionGVR, metav1.ListOptions{}, func(obj *unstructured.Unstructured) error {
-			id := resourceID(obj)
+			id := objectID(obj)
 
 			conditions, err := conditionsOf(obj)
 			if err != nil {
@@ -111,7 +111,7 @@ var _ = Describe("OLM", Label("olm"), func() {
 	It("requires every InstallPlan to not have failed", func(ctx SpecContext) {
 		var problems []string
 		err := eachResource(ctx, installPlanGVR, metav1.ListOptions{}, func(obj *unstructured.Unstructured) error {
-			id := resourceID(obj)
+			id := objectID(obj)
 
 			phase, _, err := unstructured.NestedString(obj.Object, "status", "phase")
 			if err != nil {
