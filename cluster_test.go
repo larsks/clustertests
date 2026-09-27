@@ -37,8 +37,7 @@ var (
 
 var _ = Describe("cluster health", func() {
 	It("requires every node to be schedulable, Ready, and free of resource pressure or network problems", Label("nodes"), func(ctx SpecContext) {
-		nodes, err := listNodes(ctx, metav1.ListOptions{})
-		Expect(err).NotTo(HaveOccurred(), "list nodes")
+		nodes := allNodes(ctx)
 		Expect(nodes).NotTo(BeEmpty(), "no nodes found")
 
 		var problems []string

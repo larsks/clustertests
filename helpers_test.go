@@ -68,6 +68,43 @@ func listNodes(ctx context.Context, opts metav1.ListOptions) ([]corev1.Node, err
 	return nodes, err
 }
 
+// cachedNodes holds every node in the cluster, fetched once per test process.
+// A nil value means the fetch hasn't happened yet. Every check that needs
+// nodes, whether all of them or a label-selected subset, goes through this
+// one cache instead of each making its own List call: node counts are small
+// enough (unlike pods, which are streamed instead of cached) that holding the
+// full list in memory is cheap, and every consumer just filters it locally.
+var cachedNodes *[]corev1.Node
+
+// allNodes returns every node in the cluster, fetching and caching the full,
+// unfiltered list on first use. Like the other per-process caches in this
+// file, this is a snapshot from the first call: a node that joins, leaves, or
+// gets relabeled later in the same run won't be reflected.
+func allNodes(ctx context.Context) []corev1.Node {
+	GinkgoHelper()
+
+	if cachedNodes == nil {
+		nodes, err := listNodes(ctx, metav1.ListOptions{})
+		Expect(err).NotTo(HaveOccurred(), "list nodes")
+		cachedNodes = &nodes
+	}
+	return *cachedNodes
+}
+
+// nodesMatching filters allNodes(ctx) by selector, without an API call of its
+// own.
+func nodesMatching(ctx context.Context, selector labels.Selector) []corev1.Node {
+	GinkgoHelper()
+
+	var matched []corev1.Node
+	for _, node := range allNodes(ctx) {
+		if selector.Matches(labels.Set(node.Labels)) {
+			matched = append(matched, node)
+		}
+	}
+	return matched
+}
+
 // resourceKindExists caches whether the API server serves each resource type
 // at all, as distinct from whether any instances of it currently exist. Only
 // definitive answers are cached; a failed lookup fails the spec and is
@@ -345,9 +382,7 @@ func daemonsetIsAvailable(ctx context.Context, daemonset *appsv1.DaemonSet) {
 	id := objectID(daemonset)
 
 	selector := labels.Set(daemonset.Spec.Template.Spec.NodeSelector).AsSelector()
-	nodes, err := listNodes(ctx, metav1.ListOptions{LabelSelector: selector.String()})
-	Expect(err).NotTo(HaveOccurred(), "list nodes matching daemonset %s NodeSelector", id)
-	expected := len(nodes)
+	expected := len(nodesMatching(ctx, selector))
 
 	Expect(daemonset.Status.ObservedGeneration).To(
 		BeNumerically(">=", daemonset.Generation),

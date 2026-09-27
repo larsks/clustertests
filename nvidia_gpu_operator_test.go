@@ -15,26 +15,16 @@ const (
 	nvidiaGpuOperatorNamespace = "nvidia-gpu-operator"
 )
 
-// gpuNodeLabelSelector matches nodes labeled as having a GPU.
-var gpuNodeLabelSelector = labels.SelectorFromSet(labels.Set{
+// gpuNodeSelector matches nodes labeled as having a GPU.
+var gpuNodeSelector = labels.SelectorFromSet(labels.Set{
 	"nvidia.com/gpu.present": "true",
-}).String()
+})
 
-// cachedGPUNodes holds the result of the first successful GPU node lookup.
-// A nil value means the lookup has not happened yet.
-var cachedGPUNodes *[]corev1.Node
-
-// gpuNodes returns the nodes labeled as having a GPU. The list is fetched
-// once per test process and reused by every spec.
+// gpuNodes returns the nodes labeled as having a GPU, filtered locally from
+// the shared, once-per-process node cache (see allNodes/nodesMatching in
+// helpers_test.go) rather than its own List call.
 func gpuNodes(ctx context.Context) []corev1.Node {
-	GinkgoHelper()
-
-	if cachedGPUNodes == nil {
-		nodes, err := listNodes(ctx, metav1.ListOptions{LabelSelector: gpuNodeLabelSelector})
-		Expect(err).NotTo(HaveOccurred(), "list GPU nodes")
-		cachedGPUNodes = &nodes
-	}
-	return *cachedGPUNodes
+	return nodesMatching(ctx, gpuNodeSelector)
 }
 
 var _ = Describe("NvidiaGpuOperator", Label("gpu"), func() {
