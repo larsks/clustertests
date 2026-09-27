@@ -2,9 +2,9 @@ package cluster_tests
 
 import (
 	"fmt"
-	"os"
 	"slices"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -16,6 +16,10 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
+
+// clientTimeout bounds every API request so a hung API server fails the spec
+// instead of blocking until the suite timeout.
+const clientTimeout = 30 * time.Second
 
 func TestKubernetesHealthChecks(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -50,21 +54,18 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	}
 })
 
+// kubernetesConfig loads client configuration the same way kubectl does: an
+// explicit KUBECONFIG or the default kubeconfig file takes precedence, and
+// in-cluster service account credentials are used only when no kubeconfig is
+// available.
 func kubernetesConfig() (*rest.Config, error) {
-	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
-		config, err := rest.InClusterConfig()
-		if err != nil {
-			return nil, fmt.Errorf("load in-cluster Kubernetes credentials: %w", err)
-		}
-		return config, nil
-	}
-
 	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		clientcmd.NewDefaultClientConfigLoadingRules(),
 		&clientcmd.ConfigOverrides{},
 	).ClientConfig()
 	if err != nil {
-		return nil, fmt.Errorf("load Kubernetes credentials from KUBECONFIG or the default kubeconfig: %w", err)
+		return nil, fmt.Errorf("load Kubernetes credentials from KUBECONFIG, the default kubeconfig, or in-cluster service account: %w", err)
 	}
+	config.Timeout = clientTimeout
 	return config, nil
 }
