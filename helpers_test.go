@@ -107,15 +107,6 @@ func statefulSetIsAvailableByName(ctx context.Context, namespace, name string) {
 	statefulSetIsAvailable(statefulSet)
 }
 
-func deploymentsAreAvailable(ctx context.Context, namespace string, names []string) {
-	GinkgoHelper()
-	for _, name := range names {
-		deployment, err := coreClient.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
-		Expect(err).NotTo(HaveOccurred())
-		deploymentIsAvailable(deployment)
-	}
-}
-
 /*
 * daemonsetIsAvailable verifies that the number of active instances of a
 * daemonset matches the number of expected instances based on it's
@@ -139,13 +130,4 @@ func daemonsetIsAvailableByName(ctx context.Context, namespace, name string) {
 	daemonset, err := coreClient.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
 	Expect(err).NotTo(HaveOccurred())
 	daemonsetIsAvailable(ctx, daemonset)
-}
-
-func daemonsetsAreAvailable(ctx context.Context, namespace string, names []string) {
-	GinkgoHelper()
-	for _, name := range names {
-		daemonset, err := coreClient.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
-		Expect(err).NotTo(HaveOccurred())
-		daemonsetIsAvailable(ctx, daemonset)
-	}
 }
