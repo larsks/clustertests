@@ -2,7 +2,6 @@ package cluster_tests
 
 import (
 	"fmt"
-	"slices"
 	"testing"
 	"time"
 
@@ -44,12 +43,13 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 		&authenticationv1.SelfSubjectReview{},
 		metav1.CreateOptions{},
 	)
-	if err != nil {
-		Fail(fmt.Sprintf("Kubernetes authentication check failed; aborting suite before specs: %v", err))
-	}
-	if identity.Status.UserInfo.Username == "" || identity.Status.UserInfo.Username == "system:anonymous" || slices.Contains(identity.Status.UserInfo.Groups, "system:unauthenticated") {
-		Fail(fmt.Sprintf("Kubernetes authentication check returned an unauthenticated identity (%q); aborting suite before specs", identity.Status.UserInfo.Username))
-	}
+	Expect(err).NotTo(HaveOccurred(), "Kubernetes authentication check failed; aborting suite before specs")
+
+	username := identity.Status.UserInfo.Username
+	Expect(username).NotTo(BeElementOf("", "system:anonymous"),
+		"Kubernetes authentication check returned an unauthenticated identity; aborting suite before specs")
+	Expect(identity.Status.UserInfo.Groups).NotTo(ContainElement("system:unauthenticated"),
+		"Kubernetes authentication check returned an unauthenticated identity (%q); aborting suite before specs", username)
 })
 
 // kubernetesConfig loads client configuration the same way kubectl does: an
