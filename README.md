@@ -6,6 +6,7 @@ This directory contains read-only Ginkgo checks for a live Kubernetes cluster. T
 - Cert-manager
 - External secrets
 - Portworx CSI driver
+- Hosted control planes (HyperShift): HostedClusters, HostedControlPlanes, and NodePools
 
 There are also tests for NVidia-enabled GPU nodes.
 
