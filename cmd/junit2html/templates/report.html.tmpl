@@ -74,15 +74,15 @@
     width: 300px;
     max-width: 85vw;
     background: #fff;
-    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.25);
     transform: translateX(-100%);
-    transition: transform 0.2s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
     z-index: 22;
     overflow-y: auto;
   }
 
   .menu.open {
     transform: translateX(0);
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.25);
   }
 
   .menu-header {
@@ -294,13 +294,13 @@
   .test-list {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-  }
-
-  .test {
     border: 1px solid #ccc;
     border-radius: 4px;
     overflow: hidden;
+  }
+
+  .test + .test {
+    border-top: 1px solid #ccc;
   }
 
   .test-row {
@@ -383,6 +383,28 @@
 
   .test-output pre {
     background: #f5f5f5;
+  }
+
+  @media print {
+    body {
+      background: none;
+    }
+
+    .topbar {
+      position: static;
+      background: none;
+      color: #222;
+      padding-left: 0;
+    }
+
+    .menu,
+    .menu-overlay,
+    .hamburger,
+    .expand-controls,
+    .test-controls,
+    .toggle {
+      display: none;
+    }
   }
 </style>
 </head>
