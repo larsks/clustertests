@@ -118,10 +118,14 @@ var _ = Describe("ArgoCD", Label("argocd"), func() {
 	// notifications-controller is present by default on a plain install but
 	// not confirmed either way as an OpenShift GitOps default, and unlike
 	// "cluster"/"gitops-plugin" above it is a prefixed component name.
-	It("has available deployment, if present notifications-controller", func(ctx SpecContext) {
+	DescribeTable("has available deployment, if present", func(ctx SpecContext, suffix string) {
 		naming := resolveArgocdNaming(ctx)
-		deploymentIsAvailableIfPresent(ctx, naming.namespace, naming.prefix+"-notifications-controller")
-	})
+		deploymentIsAvailableIfPresent(ctx, naming.namespace, naming.prefix+"-"+suffix)
+	},
+		entriesFor(
+			"notifications-controller",
+		),
+	)
 
 	DescribeTable("has available statefulset", func(ctx SpecContext, suffix string) {
 		naming := resolveArgocdNaming(ctx)
