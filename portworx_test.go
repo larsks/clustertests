@@ -35,13 +35,19 @@ var _ = Describe("Portworx", Label("portworx"), func() {
 		"portworx-operator",
 		"pure-cosi-driver",
 		"px-pure-csi-controller",
-		"px-pure-csi-telemetry-registration",
 	)
 
 	testutil.DescribeAvailableDaemonSets(portworxNamespace,
 		"px-pure-csi-node",
-		"px-pure-csi-telemetry",
 	)
+
+	It("has available telemetry deployment, if enabled", func(ctx SpecContext) {
+		testutil.DeploymentIsAvailableIfPresent(ctx, portworxNamespace, "px-pure-csi-telemetry-registration")
+	})
+
+	It("has available telemetry daemonset, if enabled", func(ctx SpecContext) {
+		testutil.DaemonsetIsAvailableIfPresent(ctx, portworxNamespace, "px-pure-csi-telemetry")
+	})
 
 	It("has a healthy StorageCluster", func(ctx SpecContext) {
 		testutil.ExpectPhase(ctx, storageClusterGVR, metav1.ListOptions{}, testutil.AtLeastOne, "Running")

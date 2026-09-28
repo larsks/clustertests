@@ -26,6 +26,6 @@ func DescribeAvailableDeployments(namespace string, names ...string) {
 // DescribeAvailableDaemonSets is DescribeAvailableDeployments for DaemonSets.
 func DescribeAvailableDaemonSets(namespace string, names ...string) {
 	DescribeTable("has available daemonset", func(ctx SpecContext, name string) {
-		daemonsetIsAvailableByName(ctx, namespace, name)
+		DaemonsetIsAvailableByName(ctx, namespace, name)
 	}, EntriesFor(names...))
 }

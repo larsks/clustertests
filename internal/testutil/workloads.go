@@ -190,9 +190,19 @@ func DaemonsetIsAvailable(daemonset *appsv1.DaemonSet) {
 	)
 }
 
-func daemonsetIsAvailableByName(ctx context.Context, namespace, name string) {
+func DaemonsetIsAvailableByName(ctx context.Context, namespace, name string) {
 	GinkgoHelper()
 	daemonset, err := CoreClient.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
+	ExpectNoError(err)
+	DaemonsetIsAvailable(daemonset)
+}
+
+func DaemonsetIsAvailableIfPresent(ctx context.Context, namespace, name string) {
+	GinkgoHelper()
+	daemonset, err := CoreClient.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		Skip(fmt.Sprintf("daemonset %s not found", ObjectID(&metav1.ObjectMeta{Namespace: namespace, Name: name})))
+	}
 	ExpectNoError(err)
 	DaemonsetIsAvailable(daemonset)
 }
