@@ -18,6 +18,22 @@ import (
 	"k8s.io/client-go/tools/pager"
 )
 
+// Defaults for the durations that can be overridden through the environment;
+// keep them in sync with the table in README.md.
+const (
+	// defaultUnschedulablePodTimeout is how long a pod may be unschedulable
+	// before it is reported (UNSCHEDULABLE_POD_TIMEOUT).
+	defaultUnschedulablePodTimeout = 10 * time.Minute
+
+	// defaultRecentTerminationWindow is how recently a container must have
+	// been OOMKilled or restarted to be reported (RECENT_TERMINATION_WINDOW).
+	defaultRecentTerminationWindow = time.Hour
+
+	// defaultTerminatingTimeout is how long a pod or namespace may remain in
+	// the process of being deleted before it is reported (TERMINATING_TIMEOUT).
+	defaultTerminatingTimeout = 10 * time.Minute
+)
+
 var (
 	clusterOperatorGVR = schema.GroupVersionResource{
 		Group:    "config.openshift.io",
@@ -225,7 +241,7 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 	// longer than the timeout is. Pods held back on purpose by a scheduling
 	// gate report a different reason and aren't flagged.
 	It("requires no pods to be stuck unschedulable", Label("pods"), func(ctx SpecContext) {
-		timeout := durationFromEnv("UNSCHEDULABLE_POD_TIMEOUT", 10*time.Minute)
+		timeout := durationFromEnv("UNSCHEDULABLE_POD_TIMEOUT", defaultUnschedulablePodTimeout)
 		now := time.Now()
 
 		listPods := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
@@ -274,7 +290,7 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 	// flapping even if it's Running right now. Containers currently waiting
 	// for a reason the check above already reports aren't repeated here.
 	It("requires no containers to have been recently OOMKilled or restarted repeatedly", Label("pods"), func(ctx SpecContext) {
-		window := durationFromEnv("RECENT_TERMINATION_WINDOW", time.Hour)
+		window := durationFromEnv("RECENT_TERMINATION_WINDOW", defaultRecentTerminationWindow)
 		restartThreshold := int32(intFromEnv("POD_RESTART_THRESHOLD", 5))
 		now := time.Now()
 
@@ -318,6 +334,82 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 			return nil
 		})
 		Expect(err).NotTo(HaveOccurred(), "list pods across all namespaces")
+
+		slices.Sort(problems)
+		Expect(problems).To(BeEmpty())
+	})
+
+	// deletionTimestamp on a pod is when it is due to be gone: the time the
+	// delete was requested plus the termination grace period. A pod still
+	// present well past that has usually lost its kubelet (a NotReady or
+	// vanished node) or is held by a finalizer nothing is removing.
+	It("requires no pods to be stuck terminating", Label("pods"), func(ctx SpecContext) {
+		timeout := durationFromEnv("TERMINATING_TIMEOUT", defaultTerminatingTimeout)
+		now := time.Now()
+
+		listPods := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+			return coreClient.CoreV1().Pods(metav1.NamespaceAll).List(ctx, opts)
+		})
+		listPods.PageSize = listPageSize
+
+		var problems []string
+		err := listPods.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
+			pod := obj.(*corev1.Pod)
+			if pod.DeletionTimestamp == nil {
+				return nil
+			}
+
+			if overdue := now.Sub(pod.DeletionTimestamp.Time); overdue > timeout {
+				problem := fmt.Sprintf(
+					"%s/%s: terminating for %s past its deadline (node %s",
+					pod.Namespace, pod.Name, overdue.Round(time.Second), pod.Spec.NodeName,
+				)
+				if len(pod.Finalizers) > 0 {
+					problem += ", finalizers " + strings.Join(pod.Finalizers, ",")
+				}
+				problems = append(problems, problem+")")
+			}
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "list pods across all namespaces")
+
+		slices.Sort(problems)
+		Expect(problems).To(BeEmpty())
+	})
+
+	// A namespace can't finish terminating until everything in it is gone,
+	// so one that stays in the Terminating phase is blocked, most often by a
+	// resource whose finalizer belongs to a controller or CRD that has
+	// already been removed, or by an unavailable APIService. The namespace
+	// reports what is blocking it in its status conditions.
+	It("requires no namespaces to be stuck terminating", Label("namespaces"), func(ctx SpecContext) {
+		timeout := durationFromEnv("TERMINATING_TIMEOUT", defaultTerminatingTimeout)
+		now := time.Now()
+
+		listNamespaces := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+			return coreClient.CoreV1().Namespaces().List(ctx, opts)
+		})
+		listNamespaces.PageSize = listPageSize
+
+		var problems []string
+		err := listNamespaces.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
+			namespace := obj.(*corev1.Namespace)
+			if namespace.DeletionTimestamp == nil {
+				return nil
+			}
+
+			if age := now.Sub(namespace.DeletionTimestamp.Time); age > timeout {
+				problem := fmt.Sprintf("%s: terminating for %s", namespace.Name, age.Round(time.Second))
+				for _, condition := range namespace.Status.Conditions {
+					if condition.Status == corev1.ConditionTrue {
+						problem += fmt.Sprintf("; %s: %s", condition.Type, condition.Message)
+					}
+				}
+				problems = append(problems, problem)
+			}
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "list namespaces")
 
 		slices.Sort(problems)
 		Expect(problems).To(BeEmpty())

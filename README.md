@@ -64,6 +64,7 @@ overridden with environment variables, using Go duration syntax (for example
 | --- | --- | --- |
 | `UNSCHEDULABLE_POD_TIMEOUT` | `10m` | How long a pod may be unschedulable before it is reported |
 | `RECENT_TERMINATION_WINDOW` | `1h` | How recently a container must have been OOMKilled or restarted to be reported |
+| `TERMINATING_TIMEOUT` | `10m` | How long a pod or namespace may remain in the process of being deleted before it is reported (for a pod, measured past its termination grace period) |
 | `POD_RESTART_THRESHOLD` | `5` | Restart count at which a recently restarted container is reported (a plain integer, not a duration) |
 
 ## Rendering test results
