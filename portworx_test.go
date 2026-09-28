@@ -1,6 +1,7 @@
 package clustertests
 
 import (
+	"github.com/larsks/clustertests/internal/testutil"
 	. "github.com/onsi/ginkgo/v2"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -27,32 +28,32 @@ var (
 
 var _ = Describe("Portworx", Label("portworx"), func() {
 	BeforeEach(func(ctx SpecContext) {
-		skipIfResourceKindDoesNotExist(storageClusterGVR)
+		testutil.SkipIfResourceKindDoesNotExist(storageClusterGVR)
 	})
 
-	describeAvailableDeployments(portworxNamespace,
+	testutil.DescribeAvailableDeployments(portworxNamespace,
 		"portworx-operator",
 		"pure-cosi-driver",
 		"px-pure-csi-controller",
 		"px-pure-csi-telemetry-registration",
 	)
 
-	describeAvailableDaemonSets(portworxNamespace,
+	testutil.DescribeAvailableDaemonSets(portworxNamespace,
 		"px-pure-csi-node",
 		"px-pure-csi-telemetry",
 	)
 
 	It("has a healthy StorageCluster", func(ctx SpecContext) {
-		expectPhase(ctx, storageClusterGVR, metav1.ListOptions{}, atLeastOne, "Running")
+		testutil.ExpectPhase(ctx, storageClusterGVR, metav1.ListOptions{}, testutil.AtLeastOne, "Running")
 	})
 
 	It("has a healthy PureStorageCluster", func(ctx SpecContext) {
-		_, err := dynamicClient.Resource(purestorageClusterGVR).List(ctx, metav1.ListOptions{Limit: 1})
+		_, err := testutil.DynamicClient.Resource(purestorageClusterGVR).List(ctx, metav1.ListOptions{Limit: 1})
 		if apierrors.IsForbidden(err) {
 			Skip("insufficient privileges to list PureStorageCluster; rerun with an admin privileges to include this check")
 		}
-		expectNoError(err, "list PureStorageClusters")
+		testutil.ExpectNoError(err, "list PureStorageClusters")
 
-		expectPhase(ctx, purestorageClusterGVR, metav1.ListOptions{}, atLeastOne, "Running")
+		testutil.ExpectPhase(ctx, purestorageClusterGVR, metav1.ListOptions{}, testutil.AtLeastOne, "Running")
 	})
 })

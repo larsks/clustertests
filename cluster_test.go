@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/larsks/clustertests/internal/testutil"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -34,7 +35,7 @@ var (
 
 var _ = Describe("cluster health", Label("cluster"), func() {
 	It("requires every node to be schedulable, Ready, and free of resource pressure or network problems", Label("nodes"), func(ctx SpecContext) {
-		nodes := clusterNodes
+		nodes := testutil.ClusterNodes
 		Expect(nodes).NotTo(BeEmpty(), "no nodes found")
 
 		var problems []string
@@ -72,13 +73,13 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 			}
 		}
 
-		expectNoProblems(problems)
+		testutil.ExpectNoProblems(problems)
 	})
 
 	It("requires every PersistentVolumeClaim to be Bound", Label("storage"), func(ctx SpecContext) {
 		var problems []string
-		err := eachItem(ctx, coreClient.CoreV1().PersistentVolumeClaims(metav1.NamespaceAll).List, metav1.ListOptions{}, func(claim *corev1.PersistentVolumeClaim) error {
-			if claim.Status.Phase == corev1.ClaimBound || isExcludedNamespace(claim.Namespace) ||
+		err := testutil.EachItem(ctx, testutil.CoreClient.CoreV1().PersistentVolumeClaims(metav1.NamespaceAll).List, metav1.ListOptions{}, func(claim *corev1.PersistentVolumeClaim) error {
+			if claim.Status.Phase == corev1.ClaimBound || testutil.IsExcludedNamespace(claim.Namespace) ||
 				pvcAwaitingFirstConsumer(claim) {
 				return nil
 			}
@@ -90,35 +91,35 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 			problems = append(problems, fmt.Sprintf("%s/%s: phase=%s", claim.Namespace, claim.Name, phase))
 			return nil
 		})
-		expectNoError(err, "list PersistentVolumeClaims across all namespaces")
+		testutil.ExpectNoError(err, "list PersistentVolumeClaims across all namespaces")
 
-		expectNoProblems(problems)
+		testutil.ExpectNoProblems(problems)
 	})
 
 	It("requires every ClusterOperator to be Available and not Degraded", Label("cluster-operators"), func(ctx SpecContext) {
-		skipIfResourceKindDoesNotExist(clusterOperatorGVR)
+		testutil.SkipIfResourceKindDoesNotExist(clusterOperatorGVR)
 
-		expectConditions(ctx, clusterOperatorGVR, atLeastOne,
-			conditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
-			conditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
+		testutil.ExpectConditions(ctx, clusterOperatorGVR, testutil.AtLeastOne,
+			testutil.ConditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
+			testutil.ConditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
 		)
 	})
 
 	It("requires ClusterVersion to be Available and not Failing", Label("cluster-version"), func(ctx SpecContext) {
-		skipIfResourceKindDoesNotExist(clusterVersionGVR)
+		testutil.SkipIfResourceKindDoesNotExist(clusterVersionGVR)
 
-		expectConditions(ctx, clusterVersionGVR, atLeastOne,
-			conditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
-			conditionExpectation{Type: "Failing", Status: metav1.ConditionFalse},
+		testutil.ExpectConditions(ctx, clusterVersionGVR, testutil.AtLeastOne,
+			testutil.ConditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
+			testutil.ConditionExpectation{Type: "Failing", Status: metav1.ConditionFalse},
 		)
 	})
 
 	It("requires every MachineConfigPool to be Updated and not Degraded", Label("machine-config"), func(ctx SpecContext) {
-		skipIfResourceKindDoesNotExist(machineConfigPoolGVR)
+		testutil.SkipIfResourceKindDoesNotExist(machineConfigPoolGVR)
 
-		expectConditions(ctx, machineConfigPoolGVR, atLeastOne,
-			conditionExpectation{Type: "Updated", Status: metav1.ConditionTrue},
-			conditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
+		testutil.ExpectConditions(ctx, machineConfigPoolGVR, testutil.AtLeastOne,
+			testutil.ConditionExpectation{Type: "Updated", Status: metav1.ConditionTrue},
+			testutil.ConditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
 		)
 	})
 
@@ -130,7 +131,7 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 	// spurious failure.
 	It("requires no CertificateSigningRequest to be stuck pending", Label("csr"), func(ctx SpecContext) {
 		var problems []string
-		err := eachItem(ctx, coreClient.CertificatesV1().CertificateSigningRequests().List, metav1.ListOptions{}, func(csr *certificatesv1.CertificateSigningRequest) error {
+		err := testutil.EachItem(ctx, testutil.CoreClient.CertificatesV1().CertificateSigningRequests().List, metav1.ListOptions{}, func(csr *certificatesv1.CertificateSigningRequest) error {
 			var decided bool
 			for _, condition := range csr.Status.Conditions {
 				if condition.Type == certificatesv1.CertificateApproved || condition.Type == certificatesv1.CertificateDenied {
@@ -143,9 +144,9 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 			}
 			return nil
 		})
-		expectNoError(err, "list CertificateSigningRequests")
+		testutil.ExpectNoError(err, "list CertificateSigningRequests")
 
-		expectNoProblems(problems)
+		testutil.ExpectNoProblems(problems)
 	})
 
 	// A namespace can't finish terminating until everything in it is gone,
@@ -154,11 +155,11 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 	// already been removed, or by an unavailable APIService. The namespace
 	// reports what is blocking it in its status conditions.
 	It("requires no namespaces to be stuck terminating", Label("namespaces"), func(ctx SpecContext) {
-		timeout := getEnvWithDefault("TERMINATING_TIMEOUT", defaultTerminatingTimeout)
+		timeout := testutil.GetEnvWithDefault("TERMINATING_TIMEOUT", testutil.DefaultTerminatingTimeout)
 		now := time.Now()
 
 		var problems []string
-		err := eachItem(ctx, coreClient.CoreV1().Namespaces().List, metav1.ListOptions{}, func(namespace *corev1.Namespace) error {
+		err := testutil.EachItem(ctx, testutil.CoreClient.CoreV1().Namespaces().List, metav1.ListOptions{}, func(namespace *corev1.Namespace) error {
 			if namespace.DeletionTimestamp == nil {
 				return nil
 			}
@@ -174,9 +175,9 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 			}
 			return nil
 		})
-		expectNoError(err, "list namespaces")
+		testutil.ExpectNoError(err, "list namespaces")
 
-		expectNoProblems(problems)
+		testutil.ExpectNoProblems(problems)
 	})
 
 })
@@ -202,11 +203,11 @@ const pvcSelectedNodeAnnotation = "volume.kubernetes.io/selected-node"
 // StorageClass defers binding until a consumer pod is scheduled, and no
 // consumer has been scheduled against it yet.
 func pvcAwaitingFirstConsumer(claim *corev1.PersistentVolumeClaim) bool {
-	className := defaultStorageClassName()
+	className := testutil.DefaultStorageClassName()
 	if claim.Spec.StorageClassName != nil {
 		className = *claim.Spec.StorageClassName
 	}
-	if className == "" || !storageClassIsWaitForFirstConsumer(className) {
+	if className == "" || !testutil.StorageClassIsWaitForFirstConsumer(className) {
 		return false
 	}
 

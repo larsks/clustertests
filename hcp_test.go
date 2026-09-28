@@ -3,6 +3,7 @@ package clustertests
 import (
 	"fmt"
 
+	"github.com/larsks/clustertests/internal/testutil"
 	. "github.com/onsi/ginkgo/v2"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,7 +35,7 @@ var (
 // is healthy.
 var _ = Describe("HostedControlPlanes", Label("hcp"), func() {
 	BeforeEach(func(ctx SpecContext) {
-		skipIfResourceKindDoesNotExist(hostedClusterGVR)
+		testutil.SkipIfResourceKindDoesNotExist(hostedClusterGVR)
 	})
 
 	// Degraded is checked along with Available because they catch different
@@ -43,9 +44,9 @@ var _ = Describe("HostedControlPlanes", Label("hcp"), func() {
 	// True when any control plane component deployment has unavailable
 	// replicas, which can happen while the API server is still up.
 	It("has available, non-degraded HostedClusters", func(ctx SpecContext) {
-		expectConditions(ctx, hostedClusterGVR, noneOK,
-			conditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
-			conditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
+		testutil.ExpectConditions(ctx, hostedClusterGVR, testutil.NoneOK,
+			testutil.ConditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
+			testutil.ConditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
 		)
 	})
 
@@ -54,9 +55,9 @@ var _ = Describe("HostedControlPlanes", Label("hcp"), func() {
 	// control plane components. HostedCluster reports on it, but only what
 	// it chooses to copy up.
 	It("has available, non-degraded HostedControlPlanes", func(ctx SpecContext) {
-		expectConditions(ctx, hostedControlPlaneGVR, noneOK,
-			conditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
-			conditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
+		testutil.ExpectConditions(ctx, hostedControlPlaneGVR, testutil.NoneOK,
+			testutil.ConditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
+			testutil.ConditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
 		)
 	})
 
@@ -70,20 +71,20 @@ var _ = Describe("HostedControlPlanes", Label("hcp"), func() {
 	// both, so its replica count is only required to fall within the
 	// autoscaler's bounds.
 	It("has ready NodePools with the desired number of replicas", func(ctx SpecContext) {
-		problems, _, err := conditionProblems(ctx, nodePoolGVR,
-			conditionExpectation{Type: "Ready", Status: metav1.ConditionTrue},
+		problems, _, err := testutil.ConditionProblems(ctx, nodePoolGVR,
+			testutil.ConditionExpectation{Type: "Ready", Status: metav1.ConditionTrue},
 		)
-		expectNoError(err, "list %s", nodePoolGVR.Resource)
+		testutil.ExpectNoError(err, "list %s", nodePoolGVR.Resource)
 
-		err = eachResource(ctx, nodePoolGVR, metav1.ListOptions{}, func(pool *unstructured.Unstructured) error {
+		err = testutil.EachResource(ctx, nodePoolGVR, metav1.ListOptions{}, func(pool *unstructured.Unstructured) error {
 			if problem := nodePoolReplicaProblem(pool); problem != "" {
 				problems = append(problems, problem)
 			}
 			return nil
 		})
-		expectNoError(err, "list %s", nodePoolGVR.Resource)
+		testutil.ExpectNoError(err, "list %s", nodePoolGVR.Resource)
 
-		expectNoProblems(problems)
+		testutil.ExpectNoProblems(problems)
 	})
 })
 
@@ -91,7 +92,7 @@ var _ = Describe("HostedControlPlanes", Label("hcp"), func() {
 // from what its spec asks for, or returns "" if it matches. status.replicas
 // is a required field, so a missing one is read as zero.
 func nodePoolReplicaProblem(pool *unstructured.Unstructured) string {
-	id := objectID(pool)
+	id := testutil.ObjectID(pool)
 
 	actual, _, err := unstructured.NestedInt64(pool.Object, "status", "replicas")
 	if err != nil {

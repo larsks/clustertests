@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 
+	"github.com/larsks/clustertests/internal/testutil"
 	. "github.com/onsi/ginkgo/v2"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -57,7 +58,7 @@ func resolveArgocdNaming(ctx context.Context) argocdNaming {
 	}
 	return argocdNaming{
 		namespace: name,
-		prefix:    getEnvWithDefault("ARGOCD_NAME_PREFIX", name),
+		prefix:    testutil.GetEnvWithDefault("ARGOCD_NAME_PREFIX", name),
 	}
 }
 
@@ -67,12 +68,12 @@ func detectArgocdNamespace(ctx context.Context) string {
 	GinkgoHelper()
 
 	for _, candidate := range []string{"argocd", "openshift-gitops"} {
-		_, err := coreClient.CoreV1().Namespaces().Get(ctx, candidate, metav1.GetOptions{})
+		_, err := testutil.CoreClient.CoreV1().Namespaces().Get(ctx, candidate, metav1.GetOptions{})
 		if err == nil {
 			return candidate
 		}
 		if !apierrors.IsNotFound(err) {
-			expectNoError(err, "get namespace %q", candidate)
+			testutil.ExpectNoError(err, "get namespace %q", candidate)
 		}
 	}
 	return "argocd"
@@ -86,14 +87,14 @@ var _ = Describe("ArgoCD", Label("argocd"), func() {
 	// The skip comes first, so no namespaces are looked up on a cluster
 	// without ArgoCD.
 	BeforeEach(func(ctx SpecContext) {
-		skipIfResourceKindDoesNotExist(applicationGVR)
+		testutil.SkipIfResourceKindDoesNotExist(applicationGVR)
 		naming = resolveArgocdNaming(ctx)
 	})
 
 	DescribeTable("has available deployment", func(ctx SpecContext, suffix string) {
-		deploymentIsAvailableByName(ctx, naming.namespace, naming.prefix+"-"+suffix)
+		testutil.DeploymentIsAvailableByName(ctx, naming.namespace, naming.prefix+"-"+suffix)
 	},
-		entriesFor(
+		testutil.EntriesFor(
 			"applicationset-controller",
 			"dex-server",
 			"redis",
@@ -106,9 +107,9 @@ var _ = Describe("ArgoCD", Label("argocd"), func() {
 	// operator bundle, with no equivalent on a plain Helm/upstream install,
 	// and aren't prefixed forms of anything, hence the literal names here.
 	DescribeTable("has available deployment, if present", func(ctx SpecContext, name string) {
-		deploymentIsAvailableIfPresent(ctx, naming.namespace, name)
+		testutil.DeploymentIsAvailableIfPresent(ctx, naming.namespace, name)
 	},
-		entriesFor(
+		testutil.EntriesFor(
 			"cluster",
 			"gitops-plugin",
 		),
@@ -118,17 +119,17 @@ var _ = Describe("ArgoCD", Label("argocd"), func() {
 	// not confirmed either way as an OpenShift GitOps default, and unlike
 	// "cluster"/"gitops-plugin" above it is a prefixed component name.
 	DescribeTable("has available deployment, if present", func(ctx SpecContext, suffix string) {
-		deploymentIsAvailableIfPresent(ctx, naming.namespace, naming.prefix+"-"+suffix)
+		testutil.DeploymentIsAvailableIfPresent(ctx, naming.namespace, naming.prefix+"-"+suffix)
 	},
-		entriesFor(
+		testutil.EntriesFor(
 			"notifications-controller",
 		),
 	)
 
 	DescribeTable("has available statefulset", func(ctx SpecContext, suffix string) {
-		statefulSetIsAvailableByName(ctx, naming.namespace, naming.prefix+"-"+suffix)
+		testutil.StatefulSetIsAvailableByName(ctx, naming.namespace, naming.prefix+"-"+suffix)
 	},
-		entriesFor(
+		testutil.EntriesFor(
 			"application-controller",
 		),
 	)

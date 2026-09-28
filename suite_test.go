@@ -7,13 +7,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/larsks/clustertests/internal/testutil"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	authenticationv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -39,7 +38,7 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	// the spec output, which Ginkgo includes in the JUnit report, so a report
 	// identifies the cluster it came from, without repeating it per process.
 	config, err := kubernetesConfig()
-	expectNoError(err)
+	testutil.ExpectNoError(err)
 
 	//GinkgoWriter.Printf("[[KUBERNETES_SERVER_URL|%s]]\n", sanitizedServerURL(config.Host))
 	AddReportEntry("ServerURL", sanitizedServerURL(config.Host))
@@ -48,23 +47,19 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	// Runs on every parallel process: the clients are package-level variables,
 	// so each process needs its own.
 	config, err := kubernetesConfig()
-	expectNoError(err)
+	testutil.ExpectNoError(err)
 
-	coreClient, err = kubernetes.NewForConfig(config)
-	expectNoError(err, "create Kubernetes client")
-
-	dynamicClient, err = dynamic.NewForConfig(config)
-	expectNoError(err, "create dynamic Kubernetes client")
+	testutil.InitClients(config)
 
 	// Ask the API server which identity it sees, equivalent to `oc whoami`.
 	// Do this before Ginkgo starts individual checks so bad or anonymous
 	// credentials stop the suite at setup.
-	identity, err := coreClient.AuthenticationV1().SelfSubjectReviews().Create(
+	identity, err := testutil.CoreClient.AuthenticationV1().SelfSubjectReviews().Create(
 		ctx,
 		&authenticationv1.SelfSubjectReview{},
 		metav1.CreateOptions{},
 	)
-	expectNoError(err, "Kubernetes authentication check failed; aborting suite before specs")
+	testutil.ExpectNoError(err, "Kubernetes authentication check failed; aborting suite before specs")
 
 	username := identity.Status.UserInfo.Username
 	Expect(username).NotTo(BeElementOf("", "system:anonymous"),
@@ -75,7 +70,7 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	// Fetch the cluster-wide facts that many checks share (nodes, StorageClasses,
 	// namespaces excluded from workload checks), once per process. Done after
 	// the authentication check so bad credentials are reported as such.
-	loadClusterState(ctx)
+	testutil.LoadClusterState(ctx)
 })
 
 // sanitizedServerURL returns host reduced to scheme, host and port, dropping

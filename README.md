@@ -127,4 +127,7 @@ just view-report
 - Tests must be read-only.
 - If the tests involve resources that are not Kubernetes-native, gate the
   test on an appropriate CRD.
-- Take advantage of helper functions in `helpers_test.go`.
+- Take advantage of the helper functions in `internal/testutil`. Shared helpers
+  belong there, not in a spec file; a helper used by only one spec file may stay
+  in that file. Default values for the environment-variable settings are in
+  `internal/testutil/defaults.go`.

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/larsks/clustertests/internal/testutil"
 	. "github.com/onsi/ginkgo/v2"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -26,7 +27,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 	It("requires no pods to be Failed, crash-looping, or unable to pull their image", Label("pods"), func(ctx SpecContext) {
 		var problems []string
 		err := eachPod(ctx, func(pod *corev1.Pod) error {
-			if isExcludedNamespace(pod.Namespace) {
+			if testutil.IsExcludedNamespace(pod.Namespace) {
 				return nil
 			}
 			id := pod.Namespace + "/" + pod.Name
@@ -57,9 +58,9 @@ var _ = Describe("workload health", Label("cluster"), func() {
 			}
 			return nil
 		})
-		expectNoError(err, "list pods across all namespaces")
+		testutil.ExpectNoError(err, "list pods across all namespaces")
 
-		expectNoProblems(problems)
+		testutil.ExpectNoProblems(problems)
 	})
 
 	// The scheduler reports Unschedulable while it is still trying, so a pod
@@ -68,13 +69,13 @@ var _ = Describe("workload health", Label("cluster"), func() {
 	// longer than the timeout is. Pods held back on purpose by a scheduling
 	// gate report a different reason and aren't flagged.
 	It("requires no pods to be stuck unschedulable", Label("pods"), func(ctx SpecContext) {
-		timeout := getEnvWithDefault("UNSCHEDULABLE_POD_TIMEOUT", defaultUnschedulablePodTimeout)
+		timeout := testutil.GetEnvWithDefault("UNSCHEDULABLE_POD_TIMEOUT", testutil.DefaultUnschedulablePodTimeout)
 		now := time.Now()
 
 		var problems []string
 		err := eachPod(ctx, func(pod *corev1.Pod) error {
 			if pod.Status.Phase != corev1.PodPending || pod.DeletionTimestamp != nil ||
-				isExcludedNamespace(pod.Namespace) {
+				testutil.IsExcludedNamespace(pod.Namespace) {
 				return nil
 			}
 
@@ -98,9 +99,9 @@ var _ = Describe("workload health", Label("cluster"), func() {
 			}
 			return nil
 		})
-		expectNoError(err, "list pods across all namespaces")
+		testutil.ExpectNoError(err, "list pods across all namespaces")
 
-		expectNoProblems(problems)
+		testutil.ExpectNoProblems(problems)
 	})
 
 	// CrashLoopBackOff is only visible while a container is between
@@ -111,13 +112,13 @@ var _ = Describe("workload health", Label("cluster"), func() {
 	// flapping even if it's Running right now. Containers currently waiting
 	// for a reason the check above already reports aren't repeated here.
 	It("requires no containers to have been recently OOMKilled or restarted repeatedly", Label("pods"), func(ctx SpecContext) {
-		window := getEnvWithDefault("RECENT_TERMINATION_WINDOW", defaultRecentTerminationWindow)
-		restartThreshold := int32(getEnvWithDefault("POD_RESTART_THRESHOLD", defaultPodRestartThreshold))
+		window := testutil.GetEnvWithDefault("RECENT_TERMINATION_WINDOW", testutil.DefaultRecentTerminationWindow)
+		restartThreshold := int32(testutil.GetEnvWithDefault("POD_RESTART_THRESHOLD", testutil.DefaultPodRestartThreshold))
 		now := time.Now()
 
 		var problems []string
 		err := eachPod(ctx, func(pod *corev1.Pod) error {
-			if isExcludedNamespace(pod.Namespace) {
+			if testutil.IsExcludedNamespace(pod.Namespace) {
 				return nil
 			}
 
@@ -151,9 +152,9 @@ var _ = Describe("workload health", Label("cluster"), func() {
 			}
 			return nil
 		})
-		expectNoError(err, "list pods across all namespaces")
+		testutil.ExpectNoError(err, "list pods across all namespaces")
 
-		expectNoProblems(problems)
+		testutil.ExpectNoProblems(problems)
 	})
 
 	// deletionTimestamp on a pod is when it is due to be gone: the time the
@@ -161,12 +162,12 @@ var _ = Describe("workload health", Label("cluster"), func() {
 	// present well past that has usually lost its kubelet (a NotReady or
 	// vanished node) or is held by a finalizer nothing is removing.
 	It("requires no pods to be stuck terminating", Label("pods"), func(ctx SpecContext) {
-		timeout := getEnvWithDefault("TERMINATING_TIMEOUT", defaultTerminatingTimeout)
+		timeout := testutil.GetEnvWithDefault("TERMINATING_TIMEOUT", testutil.DefaultTerminatingTimeout)
 		now := time.Now()
 
 		var problems []string
 		err := eachPod(ctx, func(pod *corev1.Pod) error {
-			if pod.DeletionTimestamp == nil || isExcludedNamespace(pod.Namespace) {
+			if pod.DeletionTimestamp == nil || testutil.IsExcludedNamespace(pod.Namespace) {
 				return nil
 			}
 
@@ -182,9 +183,9 @@ var _ = Describe("workload health", Label("cluster"), func() {
 			}
 			return nil
 		})
-		expectNoError(err, "list pods across all namespaces")
+		testutil.ExpectNoError(err, "list pods across all namespaces")
 
-		expectNoProblems(problems)
+		testutil.ExpectNoProblems(problems)
 	})
 
 	// This is the workload-level counterpart of the per-pod checks above, and
@@ -197,8 +198,8 @@ var _ = Describe("workload health", Label("cluster"), func() {
 	It("requires every Deployment, StatefulSet, and DaemonSet to have its replicas available", Label("workloads"), func(ctx SpecContext) {
 		var problems []string
 
-		err := eachItem(ctx, coreClient.AppsV1().Deployments(metav1.NamespaceAll).List, metav1.ListOptions{}, func(deployment *appsv1.Deployment) error {
-			if isExcludedNamespace(deployment.Namespace) {
+		err := testutil.EachItem(ctx, testutil.CoreClient.AppsV1().Deployments(metav1.NamespaceAll).List, metav1.ListOptions{}, func(deployment *appsv1.Deployment) error {
+			if testutil.IsExcludedNamespace(deployment.Namespace) {
 				return nil
 			}
 			if problem := deploymentProblem(deployment); problem != "" {
@@ -206,38 +207,38 @@ var _ = Describe("workload health", Label("cluster"), func() {
 			}
 			return nil
 		})
-		expectNoError(err, "list Deployments across all namespaces")
+		testutil.ExpectNoError(err, "list Deployments across all namespaces")
 
-		err = eachItem(ctx, coreClient.AppsV1().StatefulSets(metav1.NamespaceAll).List, metav1.ListOptions{}, func(statefulSet *appsv1.StatefulSet) error {
-			if isExcludedNamespace(statefulSet.Namespace) {
+		err = testutil.EachItem(ctx, testutil.CoreClient.AppsV1().StatefulSets(metav1.NamespaceAll).List, metav1.ListOptions{}, func(statefulSet *appsv1.StatefulSet) error {
+			if testutil.IsExcludedNamespace(statefulSet.Namespace) {
 				return nil
 			}
-			desired := desiredReplicas(statefulSet.Spec.Replicas)
+			desired := testutil.DesiredReplicas(statefulSet.Spec.Replicas)
 			if statefulSet.DeletionTimestamp == nil && statefulSet.Status.ReadyReplicas < desired {
 				problems = append(problems, fmt.Sprintf(
 					"statefulset %s: %d of %d replicas ready",
-					objectID(statefulSet), statefulSet.Status.ReadyReplicas, desired,
+					testutil.ObjectID(statefulSet), statefulSet.Status.ReadyReplicas, desired,
 				))
 			}
 			return nil
 		})
-		expectNoError(err, "list StatefulSets across all namespaces")
+		testutil.ExpectNoError(err, "list StatefulSets across all namespaces")
 
-		err = eachItem(ctx, coreClient.AppsV1().DaemonSets(metav1.NamespaceAll).List, metav1.ListOptions{}, func(daemonSet *appsv1.DaemonSet) error {
-			if isExcludedNamespace(daemonSet.Namespace) {
+		err = testutil.EachItem(ctx, testutil.CoreClient.AppsV1().DaemonSets(metav1.NamespaceAll).List, metav1.ListOptions{}, func(daemonSet *appsv1.DaemonSet) error {
+			if testutil.IsExcludedNamespace(daemonSet.Namespace) {
 				return nil
 			}
 			if daemonSet.DeletionTimestamp == nil && daemonSet.Status.NumberAvailable < daemonSet.Status.DesiredNumberScheduled {
 				problems = append(problems, fmt.Sprintf(
 					"daemonset %s: %d of %d pods available",
-					objectID(daemonSet), daemonSet.Status.NumberAvailable, daemonSet.Status.DesiredNumberScheduled,
+					testutil.ObjectID(daemonSet), daemonSet.Status.NumberAvailable, daemonSet.Status.DesiredNumberScheduled,
 				))
 			}
 			return nil
 		})
-		expectNoError(err, "list DaemonSets across all namespaces")
+		testutil.ExpectNoError(err, "list DaemonSets across all namespaces")
 
-		expectNoProblems(problems)
+		testutil.ExpectNoProblems(problems)
 	})
 
 	// A Job that has exhausted its retries or its deadline stays around in
@@ -247,17 +248,17 @@ var _ = Describe("workload health", Label("cluster"), func() {
 	// reported if that CronJob hasn't succeeded since the Job failed.
 	It("requires no Job to have failed", Label("jobs"), func(ctx SpecContext) {
 		lastSuccess := map[string]time.Time{}
-		err := eachItem(ctx, coreClient.BatchV1().CronJobs(metav1.NamespaceAll).List, metav1.ListOptions{}, func(cronJob *batchv1.CronJob) error {
+		err := testutil.EachItem(ctx, testutil.CoreClient.BatchV1().CronJobs(metav1.NamespaceAll).List, metav1.ListOptions{}, func(cronJob *batchv1.CronJob) error {
 			if cronJob.Status.LastSuccessfulTime != nil {
-				lastSuccess[objectID(cronJob)] = cronJob.Status.LastSuccessfulTime.Time
+				lastSuccess[testutil.ObjectID(cronJob)] = cronJob.Status.LastSuccessfulTime.Time
 			}
 			return nil
 		})
-		expectNoError(err, "list CronJobs across all namespaces")
+		testutil.ExpectNoError(err, "list CronJobs across all namespaces")
 
 		var problems []string
-		err = eachItem(ctx, coreClient.BatchV1().Jobs(metav1.NamespaceAll).List, metav1.ListOptions{}, func(job *batchv1.Job) error {
-			if isExcludedNamespace(job.Namespace) {
+		err = testutil.EachItem(ctx, testutil.CoreClient.BatchV1().Jobs(metav1.NamespaceAll).List, metav1.ListOptions{}, func(job *batchv1.Job) error {
+			if testutil.IsExcludedNamespace(job.Namespace) {
 				return nil
 			}
 			for _, condition := range job.Status.Conditions {
@@ -273,34 +274,34 @@ var _ = Describe("workload health", Label("cluster"), func() {
 				}
 				problems = append(problems, fmt.Sprintf(
 					"%s: failed at %s (%s: %s)",
-					objectID(job), condition.LastTransitionTime.Format(time.RFC3339), condition.Reason, condition.Message,
+					testutil.ObjectID(job), condition.LastTransitionTime.Format(time.RFC3339), condition.Reason, condition.Message,
 				))
 			}
 			return nil
 		})
-		expectNoError(err, "list Jobs across all namespaces")
+		testutil.ExpectNoError(err, "list Jobs across all namespaces")
 
-		expectNoProblems(problems)
+		testutil.ExpectNoProblems(problems)
 	})
 })
 
 // eachPod calls fn for every pod in every namespace, a page at a time.
 func eachPod(ctx context.Context, fn func(*corev1.Pod) error) error {
-	return eachItem(ctx, coreClient.CoreV1().Pods(metav1.NamespaceAll).List, metav1.ListOptions{}, fn)
+	return testutil.EachItem(ctx, testutil.CoreClient.CoreV1().Pods(metav1.NamespaceAll).List, metav1.ListOptions{}, fn)
 }
 
 // deploymentProblem describes why a Deployment doesn't have its replicas
 // available, or returns "" if it does (or is scaled to zero, or being
 // deleted).
 func deploymentProblem(deployment *appsv1.Deployment) string {
-	desired := desiredReplicas(deployment.Spec.Replicas)
+	desired := testutil.DesiredReplicas(deployment.Spec.Replicas)
 	if desired == 0 || deployment.DeletionTimestamp != nil {
 		return ""
 	}
 
-	id := "deployment " + objectID(deployment)
-	stuckMessage, stuck := deploymentRolloutStuck(deployment)
-	available := deploymentCondition(deployment, appsv1.DeploymentAvailable)
+	id := "deployment " + testutil.ObjectID(deployment)
+	stuckMessage, stuck := testutil.DeploymentRolloutStuck(deployment)
+	available := testutil.DeploymentCondition(deployment, appsv1.DeploymentAvailable)
 	status := deployment.Status
 
 	switch {

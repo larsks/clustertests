@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/larsks/clustertests/internal/testutil"
 	. "github.com/onsi/ginkgo/v2"
 
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -58,10 +59,10 @@ var (
 
 var _ = Describe("CertManager", Label("cert-manager"), func() {
 	BeforeEach(func(ctx SpecContext) {
-		skipIfResourceKindDoesNotExist(certificateGVR)
+		testutil.SkipIfResourceKindDoesNotExist(certificateGVR)
 	})
 
-	describeAvailableDeployments(certManagerNamespace,
+	testutil.DescribeAvailableDeployments(certManagerNamespace,
 		"cert-manager",
 		"cert-manager-cainjector",
 		"cert-manager-webhook",
@@ -71,15 +72,15 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 	// server, a missing CA secret) is the root cause behind every certificate
 	// that depends on it failing to issue or renew, so report it directly.
 	It("has healthy ClusterIssuers", func(ctx SpecContext) {
-		expectAllReady(ctx, clusterIssuerGVR, noneOK, conditionReady)
+		testutil.ExpectAllReady(ctx, clusterIssuerGVR, testutil.NoneOK, testutil.ConditionReady)
 	})
 
 	It("has healthy Issuers", func(ctx SpecContext) {
-		expectAllReady(ctx, issuerGVR, noneOK, conditionReady)
+		testutil.ExpectAllReady(ctx, issuerGVR, testutil.NoneOK, testutil.ConditionReady)
 	})
 
 	It("has healthy certificates", func(ctx SpecContext) {
-		expectAllReady(ctx, certificateGVR, noneOK, conditionReady)
+		testutil.ExpectAllReady(ctx, certificateGVR, testutil.NoneOK, testutil.ConditionReady)
 	})
 
 	// A CertificateRequest is what a Certificate hands to an issuer, so when
@@ -89,22 +90,22 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 	// Certificate hasn't since settled (see settledCertificates).
 	It("has no failed certificate requests", func(ctx SpecContext) {
 		settled, err := settledCertificates(ctx)
-		expectNoError(err, "list certificates")
+		testutil.ExpectNoError(err, "list certificates")
 
 		var problems []string
-		err = eachResource(ctx, certificateRequestGVR, metav1.ListOptions{}, func(request *unstructured.Unstructured) error {
+		err = testutil.EachResource(ctx, certificateRequestGVR, metav1.ListOptions{}, func(request *unstructured.Unstructured) error {
 			if certificateRequestIsStale(request, settled) {
 				return nil
 			}
-			id := objectID(request)
+			id := testutil.ObjectID(request)
 
-			conditions, err := conditionsOf(request)
+			conditions, err := testutil.ConditionsOf(request)
 			if err != nil {
 				problems = append(problems, fmt.Sprintf("%s: %v", id, err))
 				return nil
 			}
 
-			ready := apimeta.FindStatusCondition(conditions, conditionReady)
+			ready := apimeta.FindStatusCondition(conditions, testutil.ConditionReady)
 			for _, failure := range []string{"Denied", "InvalidRequest"} {
 				if condition := apimeta.FindStatusCondition(conditions, failure); condition != nil &&
 					condition.Status == metav1.ConditionTrue {
@@ -117,9 +118,9 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 			}
 			return nil
 		})
-		expectNoError(err, "list certificate requests")
+		testutil.ExpectNoError(err, "list certificate requests")
 
-		expectNoProblems(problems)
+		testutil.ExpectNoProblems(problems)
 	})
 
 	// An ACME Order tracks one attempt to get a certificate from an ACME
@@ -129,18 +130,18 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 	// remain as history, so ones belonging to a settled Certificate are
 	// ignored.
 	It("has no failed ACME orders", func(ctx SpecContext) {
-		skipIfResourceKindDoesNotExist(orderGVR)
+		testutil.SkipIfResourceKindDoesNotExist(orderGVR)
 
 		settled, err := settledCertificates(ctx)
-		expectNoError(err, "list certificates")
+		testutil.ExpectNoError(err, "list certificates")
 		staleRequests, err := staleCertificateRequests(ctx, settled)
-		expectNoError(err, "list certificate requests")
+		testutil.ExpectNoError(err, "list certificate requests")
 
 		var problems []string
-		err = eachResource(ctx, orderGVR, metav1.ListOptions{}, func(order *unstructured.Unstructured) error {
+		err = testutil.EachResource(ctx, orderGVR, metav1.ListOptions{}, func(order *unstructured.Unstructured) error {
 			state, _, err := unstructured.NestedString(order.Object, "status", "state")
 			if err != nil {
-				problems = append(problems, fmt.Sprintf("%s: %v", objectID(order), err))
+				problems = append(problems, fmt.Sprintf("%s: %v", testutil.ObjectID(order), err))
 				return nil
 			}
 			if !slices.Contains([]string{"invalid", "expired", "errored"}, state) ||
@@ -149,12 +150,12 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 			}
 
 			reason, _, _ := unstructured.NestedString(order.Object, "status", "reason")
-			problems = append(problems, fmt.Sprintf("%s: state=%s (%s)", objectID(order), state, reason))
+			problems = append(problems, fmt.Sprintf("%s: state=%s (%s)", testutil.ObjectID(order), state, reason))
 			return nil
 		})
-		expectNoError(err, "list ACME orders")
+		testutil.ExpectNoError(err, "list ACME orders")
 
-		expectNoProblems(problems)
+		testutil.ExpectNoProblems(problems)
 	})
 
 	// An ACME Challenge is the proof of domain control that the ACME server
@@ -166,21 +167,21 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 	// so that is allowed for before one is reported. As with Orders, ones
 	// belonging to a settled Certificate are ignored.
 	It("has no failed or stuck ACME challenges", func(ctx SpecContext) {
-		skipIfResourceKindDoesNotExist(challengeGVR)
+		testutil.SkipIfResourceKindDoesNotExist(challengeGVR)
 
-		timeout := getEnvWithDefault("CHALLENGE_PENDING_TIMEOUT", defaultChallengePendingTimeout)
+		timeout := testutil.GetEnvWithDefault("CHALLENGE_PENDING_TIMEOUT", testutil.DefaultChallengePendingTimeout)
 		now := time.Now()
 
 		settled, err := settledCertificates(ctx)
-		expectNoError(err, "list certificates")
+		testutil.ExpectNoError(err, "list certificates")
 		staleRequests, err := staleCertificateRequests(ctx, settled)
-		expectNoError(err, "list certificate requests")
+		testutil.ExpectNoError(err, "list certificate requests")
 		staleOrderSet, err := staleOrders(ctx, staleRequests)
-		expectNoError(err, "list ACME orders")
+		testutil.ExpectNoError(err, "list ACME orders")
 
 		var problems []string
-		err = eachResource(ctx, challengeGVR, metav1.ListOptions{}, func(challenge *unstructured.Unstructured) error {
-			id := objectID(challenge)
+		err = testutil.EachResource(ctx, challengeGVR, metav1.ListOptions{}, func(challenge *unstructured.Unstructured) error {
+			id := testutil.ObjectID(challenge)
 
 			state, _, err := unstructured.NestedString(challenge.Object, "status", "state")
 			if err != nil {
@@ -204,9 +205,9 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 			}
 			return nil
 		})
-		expectNoError(err, "list ACME challenges")
+		testutil.ExpectNoError(err, "list ACME challenges")
 
-		expectNoProblems(problems)
+		testutil.ExpectNoProblems(problems)
 	})
 
 	// A Ready=True condition can lag reality, so check the certificate's
@@ -214,8 +215,8 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 	It("has no expired certificates or overdue renewals", func(ctx SpecContext) {
 		now := time.Now()
 		var problems []string
-		err := eachResource(ctx, certificateGVR, metav1.ListOptions{}, func(certificate *unstructured.Unstructured) error {
-			id := objectID(certificate)
+		err := testutil.EachResource(ctx, certificateGVR, metav1.ListOptions{}, func(certificate *unstructured.Unstructured) error {
+			id := testutil.ObjectID(certificate)
 
 			notAfter, hasNotAfter, err := statusTime(certificate, "notAfter")
 			if err != nil {
@@ -238,9 +239,9 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 			}
 			return nil
 		})
-		expectNoError(err, "list certificates")
+		testutil.ExpectNoError(err, "list certificates")
 
-		expectNoProblems(problems)
+		testutil.ExpectNoProblems(problems)
 	})
 })
 
@@ -255,17 +256,17 @@ const certificateNameAnnotation = "cert-manager.io/certificate-name"
 // retrying) from one that has finished and left only history behind.
 func settledCertificates(ctx context.Context) (map[string]bool, error) {
 	settled := map[string]bool{}
-	err := eachResource(ctx, certificateGVR, metav1.ListOptions{}, func(certificate *unstructured.Unstructured) error {
-		conditions, err := conditionsOf(certificate)
+	err := testutil.EachResource(ctx, certificateGVR, metav1.ListOptions{}, func(certificate *unstructured.Unstructured) error {
+		conditions, err := testutil.ConditionsOf(certificate)
 		if err != nil {
 			// Leave it unsettled; the Ready condition check reports it.
 			return nil
 		}
 
-		ready := apimeta.IsStatusConditionTrue(conditions, conditionReady)
+		ready := apimeta.IsStatusConditionTrue(conditions, testutil.ConditionReady)
 		issuing := apimeta.IsStatusConditionTrue(conditions, "Issuing")
 		if ready && !issuing {
-			settled[objectID(certificate)] = true
+			settled[testutil.ObjectID(certificate)] = true
 		}
 		return nil
 	})
@@ -287,9 +288,9 @@ func certificateRequestIsStale(request *unstructured.Unstructured, settled map[s
 // set of settled Certificates.
 func staleCertificateRequests(ctx context.Context, settled map[string]bool) (map[string]bool, error) {
 	stale := map[string]bool{}
-	err := eachResource(ctx, certificateRequestGVR, metav1.ListOptions{}, func(request *unstructured.Unstructured) error {
+	err := testutil.EachResource(ctx, certificateRequestGVR, metav1.ListOptions{}, func(request *unstructured.Unstructured) error {
 		if certificateRequestIsStale(request, settled) {
-			stale[objectID(request)] = true
+			stale[testutil.ObjectID(request)] = true
 		}
 		return nil
 	})
@@ -313,9 +314,9 @@ func ownedByStale(obj *unstructured.Unstructured, ownerKind string, stale map[st
 // CertificateRequest.
 func staleOrders(ctx context.Context, staleRequests map[string]bool) (map[string]bool, error) {
 	stale := map[string]bool{}
-	err := eachResource(ctx, orderGVR, metav1.ListOptions{}, func(order *unstructured.Unstructured) error {
+	err := testutil.EachResource(ctx, orderGVR, metav1.ListOptions{}, func(order *unstructured.Unstructured) error {
 		if ownedByStale(order, "CertificateRequest", staleRequests) {
-			stale[objectID(order)] = true
+			stale[testutil.ObjectID(order)] = true
 		}
 		return nil
 	})

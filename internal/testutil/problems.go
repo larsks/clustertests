@@ -1,4 +1,4 @@
-package clustertests
+package testutil
 
 import (
 	"slices"
@@ -6,13 +6,15 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gcustom"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// expectNoProblems fails the spec unless problems is empty. This is how every
+// ExpectNoProblems fails the spec unless problems is empty. This is how every
 // check that gathers one description per offending object reports them. The
 // problems are sorted first so the output is stable however the API server
 // happened to order its list.
-func expectNoProblems(problems []string) {
+func ExpectNoProblems(problems []string) {
 	GinkgoHelper()
 
 	Expect(slices.Sorted(slices.Values(problems))).To(haveNoProblems())
@@ -29,4 +31,17 @@ func haveNoProblems() gcustom.CustomGomegaMatcher {
 		"{{if .Failure}}Found {{len .Actual}} problem(s):\n{{range .Actual}}  - {{.}}\n{{end}}" +
 			"{{else}}Expected problems, but found none{{end}}",
 	)
+}
+
+// ObjectID returns namespace/name for namespaced resources and just the name
+// for cluster-scoped ones, so that same-named resources in different
+// namespaces can be told apart in failure messages. Any *appsv1.Deployment,
+// *appsv1.StatefulSet, *appsv1.DaemonSet, or *unstructured.Unstructured
+// satisfies metav1.Object, whether through an embedded ObjectMeta or its own
+// accessor methods.
+func ObjectID(obj metav1.Object) string {
+	if namespace := obj.GetNamespace(); namespace != "" {
+		return namespace + "/" + obj.GetName()
+	}
+	return obj.GetName()
 }

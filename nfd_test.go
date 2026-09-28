@@ -1,6 +1,7 @@
 package clustertests
 
 import (
+	"github.com/larsks/clustertests/internal/testutil"
 	. "github.com/onsi/ginkgo/v2"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -21,20 +22,20 @@ var nodeFeatureDiscoveryGVR = schema.GroupVersionResource{
 
 var _ = Describe("NodeFeatureDiscovery", Label("nfd"), func() {
 	BeforeEach(func(ctx SpecContext) {
-		skipIfResourceKindDoesNotExist(nodeFeatureDiscoveryGVR)
+		testutil.SkipIfResourceKindDoesNotExist(nodeFeatureDiscoveryGVR)
 	})
 
-	describeAvailableDeployments(nfdNamespace,
+	testutil.DescribeAvailableDeployments(nfdNamespace,
 		"nfd-controller-manager",
 		"nfd-gc",
 		"nfd-master",
 	)
 
-	describeAvailableDaemonSets(nfdNamespace,
+	testutil.DescribeAvailableDaemonSets(nfdNamespace,
 		"nfd-worker",
 	)
 
 	It("has available NodeFeatureDiscovery instances", func(ctx SpecContext) {
-		expectAllReady(ctx, nodeFeatureDiscoveryGVR, noneOK, "Available")
+		testutil.ExpectAllReady(ctx, nodeFeatureDiscoveryGVR, testutil.NoneOK, "Available")
 	})
 })

@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/larsks/clustertests/internal/testutil"
 	. "github.com/onsi/ginkgo/v2"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,7 +35,7 @@ func managedComponents(dsc *unstructured.Unstructured) []string {
 	GinkgoHelper()
 
 	components, _, err := unstructured.NestedMap(dsc.Object, "spec", "components")
-	expectNoError(err, "read spec.components of DataScienceCluster %s", objectID(dsc))
+	testutil.ExpectNoError(err, "read spec.components of DataScienceCluster %s", testutil.ObjectID(dsc))
 
 	var managed []string
 	for name, component := range components {
@@ -57,10 +58,10 @@ func componentResource(component string) (schema.GroupVersionResource, bool) {
 	GinkgoHelper()
 
 	groupVersion, err := schema.ParseGroupVersion(rhodsComponentsGroupVersion)
-	expectNoError(err)
+	testutil.ExpectNoError(err)
 
-	resources, err := coreClient.Discovery().ServerResourcesForGroupVersion(rhodsComponentsGroupVersion)
-	expectNoError(err, "discover %s", rhodsComponentsGroupVersion)
+	resources, err := testutil.CoreClient.Discovery().ServerResourcesForGroupVersion(rhodsComponentsGroupVersion)
+	testutil.ExpectNoError(err, "discover %s", rhodsComponentsGroupVersion)
 
 	for _, resource := range resources.APIResources {
 		if !strings.Contains(resource.Name, "/") && strings.EqualFold(resource.Kind, component) {
@@ -72,16 +73,16 @@ func componentResource(component string) (schema.GroupVersionResource, bool) {
 
 var _ = Describe("RedHatOpenShiftAI", Label("rhods"), func() {
 	BeforeEach(func(ctx SpecContext) {
-		skipIfResourceKindDoesNotExist(dataScienceClusterGVR)
+		testutil.SkipIfResourceKindDoesNotExist(dataScienceClusterGVR)
 	})
 
-	describeAvailableDeployments(rhodsOperatorNamespace,
+	testutil.DescribeAvailableDeployments(rhodsOperatorNamespace,
 		"rhods-operator",
 	)
 
 	It("has a ready DataScienceCluster", func(ctx SpecContext) {
-		expectConditions(ctx, dataScienceClusterGVR, atLeastOne,
-			conditionExpectation{Type: conditionReady, Status: metav1.ConditionTrue},
+		testutil.ExpectConditions(ctx, dataScienceClusterGVR, testutil.AtLeastOne,
+			testutil.ConditionExpectation{Type: testutil.ConditionReady, Status: metav1.ConditionTrue},
 		)
 	})
 
@@ -90,11 +91,11 @@ var _ = Describe("RedHatOpenShiftAI", Label("rhods"), func() {
 	// ready. Components that are Removed or unset are deliberately absent.
 	It("has ready resources for every managed component", func(ctx SpecContext) {
 		var dscs []*unstructured.Unstructured
-		err := eachResource(ctx, dataScienceClusterGVR, metav1.ListOptions{}, func(dsc *unstructured.Unstructured) error {
+		err := testutil.EachResource(ctx, dataScienceClusterGVR, metav1.ListOptions{}, func(dsc *unstructured.Unstructured) error {
 			dscs = append(dscs, dsc)
 			return nil
 		})
-		expectNoError(err, "list DataScienceClusters")
+		testutil.ExpectNoError(err, "list DataScienceClusters")
 
 		var problems []string
 		for _, dsc := range dscs {
@@ -103,23 +104,23 @@ var _ = Describe("RedHatOpenShiftAI", Label("rhods"), func() {
 				if !found {
 					problems = append(problems, fmt.Sprintf(
 						"%s: component %s is managed but %s serves no resource of that kind",
-						objectID(dsc), component, rhodsComponentsGroupVersion,
+						testutil.ObjectID(dsc), component, rhodsComponentsGroupVersion,
 					))
 					continue
 				}
 
-				componentProblems, count, err := conditionProblems(ctx, gvr,
-					conditionExpectation{Type: conditionReady, Status: metav1.ConditionTrue},
+				componentProblems, count, err := testutil.ConditionProblems(ctx, gvr,
+					testutil.ConditionExpectation{Type: testutil.ConditionReady, Status: metav1.ConditionTrue},
 				)
-				expectNoError(err, "list %s", gvr.Resource)
+				testutil.ExpectNoError(err, "list %s", gvr.Resource)
 				if count == 0 {
 					problems = append(problems, fmt.Sprintf(
-						"%s: component %s is managed but no %s exist", objectID(dsc), component, gvr.Resource,
+						"%s: component %s is managed but no %s exist", testutil.ObjectID(dsc), component, gvr.Resource,
 					))
 				}
 				problems = append(problems, componentProblems...)
 			}
 		}
-		expectNoProblems(problems)
+		testutil.ExpectNoProblems(problems)
 	})
 })

@@ -1,6 +1,7 @@
 package clustertests
 
 import (
+	"github.com/larsks/clustertests/internal/testutil"
 	. "github.com/onsi/ginkgo/v2"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,10 +43,10 @@ var kubeVirtGVR = schema.GroupVersionResource{
 
 var _ = Describe("OpenShiftVirtualization", Label("cnv"), func() {
 	BeforeEach(func(ctx SpecContext) {
-		skipIfResourceKindDoesNotExist(virtualMachineGVR)
+		testutil.SkipIfResourceKindDoesNotExist(virtualMachineGVR)
 	})
 
-	describeAvailableDeployments(cnvNamespace,
+	testutil.DescribeAvailableDeployments(cnvNamespace,
 		"aaq-operator",
 		"cdi-apiserver",
 		"cdi-deployment",
@@ -72,7 +73,7 @@ var _ = Describe("OpenShiftVirtualization", Label("cnv"), func() {
 		"virt-template-validator",
 	)
 
-	describeAvailableDaemonSets(cnvNamespace,
+	testutil.DescribeAvailableDaemonSets(cnvNamespace,
 		"bridge-marker",
 		"kube-cni-linux-bridge-plugin",
 		"virt-handler",
@@ -82,22 +83,22 @@ var _ = Describe("OpenShiftVirtualization", Label("cnv"), func() {
 	// resource, which is what actually reconciles OpenShift Virtualization,
 	// reports that something it manages is unavailable or degraded.
 	It("has an available, non-degraded HyperConverged", func(ctx SpecContext) {
-		skipIfResourceKindDoesNotExist(hyperConvergedGVR)
+		testutil.SkipIfResourceKindDoesNotExist(hyperConvergedGVR)
 
-		expectConditions(ctx, hyperConvergedGVR, atLeastOne,
-			conditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
-			conditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
+		testutil.ExpectConditions(ctx, hyperConvergedGVR, testutil.AtLeastOne,
+			testutil.ConditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
+			testutil.ConditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
 		)
 	})
 	// HyperConverged summarizes this resource's status, but only after the
 	// fact; checking it directly points at KubeVirt itself when it's the
 	// component in trouble, and covers installs that have no HyperConverged.
 	It("has an available, non-degraded KubeVirt", func(ctx SpecContext) {
-		skipIfResourceKindDoesNotExist(kubeVirtGVR)
+		testutil.SkipIfResourceKindDoesNotExist(kubeVirtGVR)
 
-		expectConditions(ctx, kubeVirtGVR, atLeastOne,
-			conditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
-			conditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
+		testutil.ExpectConditions(ctx, kubeVirtGVR, testutil.AtLeastOne,
+			testutil.ConditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
+			testutil.ConditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
 		)
 	})
 })
