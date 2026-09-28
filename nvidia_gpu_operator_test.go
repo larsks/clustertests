@@ -116,7 +116,14 @@ var _ = Describe("NvidiaGpuOperator", Label("gpu"), func() {
 		daemonsets, err := coreClient.AppsV1().DaemonSets(nvidiaGpuOperatorNamespace).
 			List(ctx, metav1.ListOptions{LabelSelector: "app.kubernetes.io/component=nvidia-driver"})
 		Expect(err).NotTo(HaveOccurred(), "list GPU driver daemonset")
-		Expect(daemonsets.Items).To(HaveLen(1))
+
+		// Assert on the names, not the DaemonSets: when the count is wrong,
+		// Gomega prints every object it was given, manifest and all.
+		names := make([]string, len(daemonsets.Items))
+		for i, daemonset := range daemonsets.Items {
+			names[i] = objectID(&daemonset)
+		}
+		Expect(names).To(HaveLen(1), "expected exactly one GPU driver daemonset")
 		daemonsetIsAvailable(&daemonsets.Items[0])
 	})
 })
