@@ -34,14 +34,21 @@ func TestKubernetesHealthChecks(t *testing.T) {
 	RunSpecs(t, "Kubernetes Health Checks")
 }
 
-var _ = BeforeSuite(func(ctx SpecContext) {
+var _ = SynchronizedBeforeSuite(func() []byte {
+	// Runs on the first parallel process only. Record the target cluster in
+	// the spec output, which Ginkgo includes in the JUnit report, so a report
+	// identifies the cluster it came from, without repeating it per process.
 	config, err := kubernetesConfig()
 	Expect(err).NotTo(HaveOccurred())
 
-	// Record the target cluster in the spec output, which Ginkgo includes in
-	// the JUnit report, so a report identifies the cluster it came from.
 	//GinkgoWriter.Printf("[[KUBERNETES_SERVER_URL|%s]]\n", sanitizedServerURL(config.Host))
 	AddReportEntry("ServerURL", sanitizedServerURL(config.Host))
+	return nil
+}, func(ctx SpecContext, _ []byte) {
+	// Runs on every parallel process: the clients are package-level variables,
+	// so each process needs its own.
+	config, err := kubernetesConfig()
+	Expect(err).NotTo(HaveOccurred())
 
 	coreClient, err = kubernetes.NewForConfig(config)
 	Expect(err).NotTo(HaveOccurred(), "create Kubernetes client")
