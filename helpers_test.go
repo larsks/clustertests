@@ -37,36 +37,55 @@ var (
 // into one oversized request, at once.
 const listPageSize = 500
 
-// eachResource pages through every object of gvr matching opts and calls fn
-// for each one, instead of fetching the whole list at once. For a namespaced
-// resource, omitting a namespace restriction in opts (as every caller here
-// does) spans all namespaces.
+// eachItem pages through every object that list returns for opts and calls fn
+// for each one, instead of fetching the whole list at once. list is the List
+// method of a typed or dynamic client, for example
+//
+//	eachItem(ctx, coreClient.CoreV1().Pods(metav1.NamespaceAll).List, opts,
+//		func(pod *corev1.Pod) error { ... })
+//
+// and T is the item type that fn receives: the typed object for a typed
+// client, or unstructured.Unstructured for the dynamic client. For a
+// namespaced resource, passing metav1.NamespaceAll to the client spans all
+// namespaces.
+func eachItem[T any, L runtime.Object](
+	ctx context.Context,
+	list func(context.Context, metav1.ListOptions) (L, error),
+	opts metav1.ListOptions,
+	fn func(*T) error,
+) error {
+	listPages := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+		page, err := list(ctx, opts)
+		if err != nil {
+			return nil, err
+		}
+		return page, nil
+	})
+	listPages.PageSize = listPageSize
+	return listPages.EachListItem(ctx, opts, func(obj runtime.Object) error {
+		return fn(any(obj).(*T))
+	})
+}
+
+// eachResource is eachItem for a resource type that is only known by its
+// GroupVersionResource, such as a CRD. For a namespaced resource, omitting a
+// namespace restriction in opts (as every caller here does) spans all
+// namespaces.
 func eachResource(
 	ctx context.Context,
 	gvr schema.GroupVersionResource,
 	opts metav1.ListOptions,
 	fn func(*unstructured.Unstructured) error,
 ) error {
-	listPages := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-		return dynamicClient.Resource(gvr).List(ctx, opts)
-	})
-	listPages.PageSize = listPageSize
-	return listPages.EachListItem(ctx, opts, func(obj runtime.Object) error {
-		return fn(obj.(*unstructured.Unstructured))
-	})
+	return eachItem(ctx, dynamicClient.Resource(gvr).List, opts, fn)
 }
 
 // listNodes pages through nodes matching opts and returns them all. Nodes are
 // cluster-scoped, so this always spans the whole cluster.
 func listNodes(ctx context.Context, opts metav1.ListOptions) ([]corev1.Node, error) {
-	listPages := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-		return coreClient.CoreV1().Nodes().List(ctx, opts)
-	})
-	listPages.PageSize = listPageSize
-
 	var nodes []corev1.Node
-	err := listPages.EachListItem(ctx, opts, func(obj runtime.Object) error {
-		nodes = append(nodes, *obj.(*corev1.Node))
+	err := eachItem(ctx, coreClient.CoreV1().Nodes().List, opts, func(node *corev1.Node) error {
+		nodes = append(nodes, *node)
 		return nil
 	})
 	return nodes, err
@@ -135,14 +154,11 @@ func excludedNamespaces(ctx context.Context) map[string]struct{} {
 			selector, err := labels.Parse(raw)
 			Expect(err).NotTo(HaveOccurred(), "parse EXCLUDE_NAMESPACE_SELECTOR=%q as a label selector", raw)
 
-			listPages := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-				return coreClient.CoreV1().Namespaces().List(ctx, opts)
-			})
-			listPages.PageSize = listPageSize
-			err = listPages.EachListItem(ctx, metav1.ListOptions{LabelSelector: selector.String()}, func(obj runtime.Object) error {
-				excluded[obj.(*corev1.Namespace).Name] = struct{}{}
-				return nil
-			})
+			err = eachItem(ctx, coreClient.CoreV1().Namespaces().List, metav1.ListOptions{LabelSelector: selector.String()},
+				func(namespace *corev1.Namespace) error {
+					excluded[namespace.Name] = struct{}{}
+					return nil
+				})
 			Expect(err).NotTo(HaveOccurred(), "list namespaces matching EXCLUDE_NAMESPACE_SELECTOR")
 		}
 		cachedExcludedNamespaces = &excluded

@@ -12,9 +12,7 @@ import (
 	certificatesv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/tools/pager"
 )
 
 var (
@@ -79,14 +77,8 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 	})
 
 	It("requires every PersistentVolumeClaim to be Bound", Label("storage"), func(ctx SpecContext) {
-		listClaims := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-			return coreClient.CoreV1().PersistentVolumeClaims(metav1.NamespaceAll).List(ctx, opts)
-		})
-		listClaims.PageSize = listPageSize
-
 		var problems []string
-		err := listClaims.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
-			claim := obj.(*corev1.PersistentVolumeClaim)
+		err := eachItem(ctx, coreClient.CoreV1().PersistentVolumeClaims(metav1.NamespaceAll).List, metav1.ListOptions{}, func(claim *corev1.PersistentVolumeClaim) error {
 			if claim.Status.Phase == corev1.ClaimBound || isExcludedNamespace(ctx, claim.Namespace) ||
 				pvcAwaitingFirstConsumer(ctx, claim) {
 				return nil
@@ -141,14 +133,8 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 	// point-in-time read, so a CSR caught moments after creation can cause a
 	// spurious failure.
 	It("requires no CertificateSigningRequest to be stuck pending", Label("csr"), func(ctx SpecContext) {
-		listCSRs := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-			return coreClient.CertificatesV1().CertificateSigningRequests().List(ctx, opts)
-		})
-		listCSRs.PageSize = listPageSize
-
 		var problems []string
-		err := listCSRs.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
-			csr := obj.(*certificatesv1.CertificateSigningRequest)
+		err := eachItem(ctx, coreClient.CertificatesV1().CertificateSigningRequests().List, metav1.ListOptions{}, func(csr *certificatesv1.CertificateSigningRequest) error {
 			var decided bool
 			for _, condition := range csr.Status.Conditions {
 				if condition.Type == certificatesv1.CertificateApproved || condition.Type == certificatesv1.CertificateDenied {
@@ -175,14 +161,8 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 		timeout := getEnvWithDefault("TERMINATING_TIMEOUT", defaultTerminatingTimeout)
 		now := time.Now()
 
-		listNamespaces := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-			return coreClient.CoreV1().Namespaces().List(ctx, opts)
-		})
-		listNamespaces.PageSize = listPageSize
-
 		var problems []string
-		err := listNamespaces.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
-			namespace := obj.(*corev1.Namespace)
+		err := eachItem(ctx, coreClient.CoreV1().Namespaces().List, metav1.ListOptions{}, func(namespace *corev1.Namespace) error {
 			if namespace.DeletionTimestamp == nil {
 				return nil
 			}

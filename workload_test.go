@@ -14,8 +14,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/pager"
 )
 
 // badWaitingReasons are container waiting reasons that mean a container won't
@@ -27,14 +25,8 @@ var _ = Describe("workload health", Label("cluster"), func() {
 	// recover on its own. Pending and Running pods are otherwise left alone,
 	// since a container can restart occasionally without being unhealthy.
 	It("requires no pods to be Failed, crash-looping, or unable to pull their image", Label("pods"), func(ctx SpecContext) {
-		listPods := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-			return coreClient.CoreV1().Pods(metav1.NamespaceAll).List(ctx, opts)
-		})
-		listPods.PageSize = listPageSize
-
 		var problems []string
-		err := listPods.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
-			pod := obj.(*corev1.Pod)
+		err := eachPod(ctx, func(pod *corev1.Pod) error {
 			if isExcludedNamespace(ctx, pod.Namespace) {
 				return nil
 			}
@@ -80,14 +72,8 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		timeout := getEnvWithDefault("UNSCHEDULABLE_POD_TIMEOUT", defaultUnschedulablePodTimeout)
 		now := time.Now()
 
-		listPods := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-			return coreClient.CoreV1().Pods(metav1.NamespaceAll).List(ctx, opts)
-		})
-		listPods.PageSize = listPageSize
-
 		var problems []string
-		err := listPods.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
-			pod := obj.(*corev1.Pod)
+		err := eachPod(ctx, func(pod *corev1.Pod) error {
 			if pod.Status.Phase != corev1.PodPending || pod.DeletionTimestamp != nil ||
 				isExcludedNamespace(ctx, pod.Namespace) {
 				return nil
@@ -130,14 +116,8 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		restartThreshold := int32(getEnvWithDefault("POD_RESTART_THRESHOLD", defaultPodRestartThreshold))
 		now := time.Now()
 
-		listPods := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-			return coreClient.CoreV1().Pods(metav1.NamespaceAll).List(ctx, opts)
-		})
-		listPods.PageSize = listPageSize
-
 		var problems []string
-		err := listPods.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
-			pod := obj.(*corev1.Pod)
+		err := eachPod(ctx, func(pod *corev1.Pod) error {
 			if isExcludedNamespace(ctx, pod.Namespace) {
 				return nil
 			}
@@ -185,14 +165,8 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		timeout := getEnvWithDefault("TERMINATING_TIMEOUT", defaultTerminatingTimeout)
 		now := time.Now()
 
-		listPods := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-			return coreClient.CoreV1().Pods(metav1.NamespaceAll).List(ctx, opts)
-		})
-		listPods.PageSize = listPageSize
-
 		var problems []string
-		err := listPods.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
-			pod := obj.(*corev1.Pod)
+		err := eachPod(ctx, func(pod *corev1.Pod) error {
 			if pod.DeletionTimestamp == nil || isExcludedNamespace(ctx, pod.Namespace) {
 				return nil
 			}
@@ -224,12 +198,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 	It("requires every Deployment, StatefulSet, and DaemonSet to have its replicas available", Label("workloads"), func(ctx SpecContext) {
 		var problems []string
 
-		listDeployments := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-			return coreClient.AppsV1().Deployments(metav1.NamespaceAll).List(ctx, opts)
-		})
-		listDeployments.PageSize = listPageSize
-		err := listDeployments.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
-			deployment := obj.(*appsv1.Deployment)
+		err := eachItem(ctx, coreClient.AppsV1().Deployments(metav1.NamespaceAll).List, metav1.ListOptions{}, func(deployment *appsv1.Deployment) error {
 			if isExcludedNamespace(ctx, deployment.Namespace) {
 				return nil
 			}
@@ -240,12 +209,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		})
 		Expect(err).NotTo(HaveOccurred(), "list Deployments across all namespaces")
 
-		listStatefulSets := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-			return coreClient.AppsV1().StatefulSets(metav1.NamespaceAll).List(ctx, opts)
-		})
-		listStatefulSets.PageSize = listPageSize
-		err = listStatefulSets.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
-			statefulSet := obj.(*appsv1.StatefulSet)
+		err = eachItem(ctx, coreClient.AppsV1().StatefulSets(metav1.NamespaceAll).List, metav1.ListOptions{}, func(statefulSet *appsv1.StatefulSet) error {
 			if isExcludedNamespace(ctx, statefulSet.Namespace) {
 				return nil
 			}
@@ -263,12 +227,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		})
 		Expect(err).NotTo(HaveOccurred(), "list StatefulSets across all namespaces")
 
-		listDaemonSets := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-			return coreClient.AppsV1().DaemonSets(metav1.NamespaceAll).List(ctx, opts)
-		})
-		listDaemonSets.PageSize = listPageSize
-		err = listDaemonSets.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
-			daemonSet := obj.(*appsv1.DaemonSet)
+		err = eachItem(ctx, coreClient.AppsV1().DaemonSets(metav1.NamespaceAll).List, metav1.ListOptions{}, func(daemonSet *appsv1.DaemonSet) error {
 			if isExcludedNamespace(ctx, daemonSet.Namespace) {
 				return nil
 			}
@@ -292,12 +251,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 	// reported if that CronJob hasn't succeeded since the Job failed.
 	It("requires no Job to have failed", Label("jobs"), func(ctx SpecContext) {
 		lastSuccess := map[string]time.Time{}
-		listCronJobs := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-			return coreClient.BatchV1().CronJobs(metav1.NamespaceAll).List(ctx, opts)
-		})
-		listCronJobs.PageSize = listPageSize
-		err := listCronJobs.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
-			cronJob := obj.(*batchv1.CronJob)
+		err := eachItem(ctx, coreClient.BatchV1().CronJobs(metav1.NamespaceAll).List, metav1.ListOptions{}, func(cronJob *batchv1.CronJob) error {
 			if cronJob.Status.LastSuccessfulTime != nil {
 				lastSuccess[objectID(cronJob)] = cronJob.Status.LastSuccessfulTime.Time
 			}
@@ -305,14 +259,8 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		})
 		Expect(err).NotTo(HaveOccurred(), "list CronJobs across all namespaces")
 
-		listJobs := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-			return coreClient.BatchV1().Jobs(metav1.NamespaceAll).List(ctx, opts)
-		})
-		listJobs.PageSize = listPageSize
-
 		var problems []string
-		err = listJobs.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
-			job := obj.(*batchv1.Job)
+		err = eachItem(ctx, coreClient.BatchV1().Jobs(metav1.NamespaceAll).List, metav1.ListOptions{}, func(job *batchv1.Job) error {
 			if isExcludedNamespace(ctx, job.Namespace) {
 				return nil
 			}
@@ -336,10 +284,14 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		})
 		Expect(err).NotTo(HaveOccurred(), "list Jobs across all namespaces")
 
-		slices.Sort(problems)
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 })
+
+// eachPod calls fn for every pod in every namespace, a page at a time.
+func eachPod(ctx context.Context, fn func(*corev1.Pod) error) error {
+	return eachItem(ctx, coreClient.CoreV1().Pods(metav1.NamespaceAll).List, metav1.ListOptions{}, fn)
+}
 
 // deploymentProblem describes why a Deployment doesn't have its replicas
 // available, or returns "" if it does (or is scaled to zero, or being
