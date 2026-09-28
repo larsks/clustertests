@@ -2,6 +2,9 @@ package clustertests
 
 import (
 	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -17,6 +20,16 @@ var virtualMachineGVR = schema.GroupVersionResource{
 	Group:    "kubevirt.io",
 	Version:  "v1",
 	Resource: "virtualmachines",
+}
+
+// hyperConvergedGVR is the HyperConverged Cluster Operator's top-level
+// resource, which rolls up the health of everything OpenShift Virtualization
+// deploys. It only exists where OpenShift Virtualization (or the upstream
+// HCO) is installed, not on a plain KubeVirt install.
+var hyperConvergedGVR = schema.GroupVersionResource{
+	Group:    "hco.kubevirt.io",
+	Version:  "v1beta1",
+	Resource: "hyperconvergeds",
 }
 
 var _ = Describe("OpenShiftVirtualization", Label("cnv"), func() {
@@ -60,4 +73,17 @@ var _ = Describe("OpenShiftVirtualization", Label("cnv"), func() {
 		Entry("kube-cni-linux-bridge-plugin", "kube-cni-linux-bridge-plugin"),
 		Entry("virt-handler", "virt-handler"),
 	)
+
+	// The deployments above can all be running while the HyperConverged
+	// resource, which is what actually reconciles OpenShift Virtualization,
+	// reports that something it manages is unavailable or degraded.
+	It("has an available, non-degraded HyperConverged", func(ctx SpecContext) {
+		skipIfResourceKindDoesNotExist(hyperConvergedGVR)
+
+		checked := expectConditions(ctx, hyperConvergedGVR,
+			conditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
+			conditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
+		)
+		Expect(checked).NotTo(BeZero(), "no HyperConverged found")
+	})
 })
