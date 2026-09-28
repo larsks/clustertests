@@ -9,15 +9,21 @@ This directory contains read-only Ginkgo checks for a live Kubernetes cluster. T
 
 There are also tests for NVidia-enabled GPU nodes.
 
-## Running the tests
+## Prerequisites
 
-You can use `go run` like this:
+You must have [`ginkgo`](ginkgo) installed:
+
+[ginkgo]: https://onsi.github.io/ginkgo/
 
 ```sh
-go run github.com/onsi/ginkgo/v2/ginkgo -v -p
+go install github.com/onsi/ginkgo/v2/ginkgo
 ```
 
-Or you can install the [Ginkgo] CLI, and then:
+This will install the `ginkgo` command into `$(go env GOPATH)/bin`. Ensure this directory is in your `$PATH`.
+
+## Running the tests
+
+To run all the tests in parallel:
 
 ```sh
 ginkgo -v -p
@@ -29,7 +35,23 @@ There may be some tests that require elevated privileges. If you have impersonat
 ginkgo -v -p -- -as system:admin
 ```
 
-[Ginkgo]: https://onsi.github.io/ginkgo/
+## Running tests the easy way
+
+There is a `Justfile` here if you have [`just`](just) installed. You can run the tests like this:
+
+```sh
+just test
+```
+
+To run only tests matching a label expression, use `--label-filter`. Any other arguments are passed to the test suite:
+
+```sh
+just test --label-filter cnv
+just test --label-filter cnv --as system:admin
+just test --as system:admin
+```
+
+[just]: https://just.systems/
 
 ## Rendering test results
 
@@ -43,6 +65,18 @@ You can render this to an HTML file using `./cmd/junit2html/`:
 
 ```sh
 go run ./cmd/junit2html/ report.xml -o report.html
+```
+
+If you have `just` installed, you can accomplish the above steps by running:
+
+```sh
+just report
+```
+
+To open the HTML report in a browser:
+
+```sh
+just view-report
 ```
 
 ## Writing new tests
