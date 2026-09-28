@@ -68,8 +68,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		})
 		Expect(err).NotTo(HaveOccurred(), "list pods across all namespaces")
 
-		slices.Sort(problems)
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 
 	// The scheduler reports Unschedulable while it is still trying, so a pod
@@ -116,8 +115,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		})
 		Expect(err).NotTo(HaveOccurred(), "list pods across all namespaces")
 
-		slices.Sort(problems)
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 
 	// CrashLoopBackOff is only visible while a container is between
@@ -176,8 +174,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		})
 		Expect(err).NotTo(HaveOccurred(), "list pods across all namespaces")
 
-		slices.Sort(problems)
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 
 	// deletionTimestamp on a pod is when it is due to be gone: the time the
@@ -214,8 +211,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		})
 		Expect(err).NotTo(HaveOccurred(), "list pods across all namespaces")
 
-		slices.Sort(problems)
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 
 	// This is the workload-level counterpart of the per-pod checks above, and
@@ -286,8 +282,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		})
 		Expect(err).NotTo(HaveOccurred(), "list DaemonSets across all namespaces")
 
-		slices.Sort(problems)
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 
 	// A Job that has exhausted its retries or its deadline stays around in

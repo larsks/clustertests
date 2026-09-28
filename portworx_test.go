@@ -3,7 +3,6 @@ package clustertests
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -57,8 +56,7 @@ func expectPhase(ctx context.Context, gvr schema.GroupVersionResource, wantPhase
 	})
 	Expect(err).NotTo(HaveOccurred(), "list %s", gvr.Resource)
 
-	slices.Sort(problems)
-	Expect(problems).To(BeEmpty())
+	expectNoProblems(problems)
 	return count
 }
 

@@ -124,6 +124,6 @@ var _ = Describe("RedHatOpenShiftAI", Label("rhods"), func() {
 				problems = append(problems, componentProblems...)
 			}
 		}
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 })

@@ -3,7 +3,6 @@ package clustertests
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -53,7 +52,7 @@ var _ = Describe("NvidiaGpuOperator", Label("gpu"), func() {
 				problems = append(problems, node.Name)
 			}
 		}
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 
 	// ClusterPolicy reports its health as status.state rather than through
@@ -95,8 +94,7 @@ var _ = Describe("NvidiaGpuOperator", Label("gpu"), func() {
 		Expect(err).NotTo(HaveOccurred(), "list ClusterPolicies")
 		Expect(count).NotTo(BeZero(), "no ClusterPolicy found")
 
-		slices.Sort(problems)
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 
 	DescribeTable("has available deployment", func(ctx SpecContext, name string) {

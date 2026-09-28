@@ -2,7 +2,6 @@ package clustertests
 
 import (
 	"fmt"
-	"slices"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -79,8 +78,7 @@ var _ = Describe("OLM", Label("olm"), func() {
 		Expect(err).NotTo(HaveOccurred(), "list ClusterServiceVersions across all namespaces")
 		Expect(count).NotTo(BeZero(), "no original ClusterServiceVersions found")
 
-		slices.Sort(problems)
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 
 	It("requires every Subscription to be free of catalog and install errors", func(ctx SpecContext) {
@@ -106,8 +104,7 @@ var _ = Describe("OLM", Label("olm"), func() {
 		})
 		Expect(err).NotTo(HaveOccurred(), "list Subscriptions across all namespaces")
 
-		slices.Sort(problems)
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 
 	// InstallPlans in "RequiresApproval" can be a legitimate steady state
@@ -129,8 +126,7 @@ var _ = Describe("OLM", Label("olm"), func() {
 		})
 		Expect(err).NotTo(HaveOccurred(), "list InstallPlans across all namespaces")
 
-		slices.Sort(problems)
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 
 	// More than one OperatorGroup in a namespace puts it in an unusable
@@ -151,7 +147,6 @@ var _ = Describe("OLM", Label("olm"), func() {
 			}
 		}
 
-		slices.Sort(problems)
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 })

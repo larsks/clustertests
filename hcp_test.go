@@ -2,7 +2,6 @@ package clustertests
 
 import (
 	"fmt"
-	"slices"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -85,8 +84,7 @@ var _ = Describe("HostedControlPlanes", Label("hcp"), func() {
 		})
 		Expect(err).NotTo(HaveOccurred(), "list %s", nodePoolGVR.Resource)
 
-		slices.Sort(problems)
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 })
 

@@ -122,8 +122,7 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 		})
 		Expect(err).NotTo(HaveOccurred(), "list certificate requests")
 
-		slices.Sort(problems)
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 
 	// An ACME Order tracks one attempt to get a certificate from an ACME
@@ -158,8 +157,7 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 		})
 		Expect(err).NotTo(HaveOccurred(), "list ACME orders")
 
-		slices.Sort(problems)
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 
 	// An ACME Challenge is the proof of domain control that the ACME server
@@ -211,8 +209,7 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 		})
 		Expect(err).NotTo(HaveOccurred(), "list ACME challenges")
 
-		slices.Sort(problems)
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 
 	// A Ready=True condition can lag reality, so check the certificate's
@@ -246,8 +243,7 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 		})
 		Expect(err).NotTo(HaveOccurred(), "list certificates")
 
-		slices.Sort(problems)
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 })
 

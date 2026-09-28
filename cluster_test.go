@@ -3,7 +3,6 @@ package clustertests
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -76,8 +75,7 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 			}
 		}
 
-		slices.Sort(problems)
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 
 	It("requires every PersistentVolumeClaim to be Bound", Label("storage"), func(ctx SpecContext) {
@@ -103,8 +101,7 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 		})
 		Expect(err).NotTo(HaveOccurred(), "list PersistentVolumeClaims across all namespaces")
 
-		slices.Sort(problems)
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 
 	It("requires every ClusterOperator to be Available and not Degraded", Label("cluster-operators"), func(ctx SpecContext) {
@@ -166,8 +163,7 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 		})
 		Expect(err).NotTo(HaveOccurred(), "list CertificateSigningRequests")
 
-		slices.Sort(problems)
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 
 	// A namespace can't finish terminating until everything in it is gone,
@@ -204,8 +200,7 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 		})
 		Expect(err).NotTo(HaveOccurred(), "list namespaces")
 
-		slices.Sort(problems)
-		Expect(problems).To(BeEmpty())
+		expectNoProblems(problems)
 	})
 
 })

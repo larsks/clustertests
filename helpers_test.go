@@ -367,7 +367,7 @@ func expectConditions(ctx context.Context, gvr schema.GroupVersionResource, expe
 
 	problems, count, err := conditionProblems(ctx, gvr, expected...)
 	Expect(err).NotTo(HaveOccurred(), "list %s", gvr.Resource)
-	Expect(problems).To(BeEmpty())
+	expectNoProblems(problems)
 	return count
 }
 
