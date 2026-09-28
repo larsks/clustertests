@@ -22,7 +22,10 @@ var (
 
 // InitClients creates CoreClient and DynamicClient from config. They are
 // package-level variables, so every parallel test process must call this
-// itself, from the per-process half of SynchronizedBeforeSuite.
+// itself, from the per-process half of SynchronizedBeforeSuite. Process #1
+// also calls it once earlier, from the run-once half, to get a client for
+// its authentication check; the per-process half then calls it again there
+// as on every other process.
 func InitClients(config *rest.Config) {
 	GinkgoHelper()
 

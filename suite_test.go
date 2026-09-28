@@ -33,7 +33,7 @@ func TestKubernetesHealthChecks(t *testing.T) {
 	RunSpecs(t, "Kubernetes Health Checks")
 }
 
-var _ = SynchronizedBeforeSuite(func() []byte {
+var _ = SynchronizedBeforeSuite(func(ctx SpecContext) []byte {
 	// Runs on the first parallel process only. Record the target cluster in
 	// the spec output, which Ginkgo includes in the JUnit report, so a report
 	// identifies the cluster it came from, without repeating it per process.
@@ -42,18 +42,9 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 
 	//GinkgoWriter.Printf("[[KUBERNETES_SERVER_URL|%s]]\n", sanitizedServerURL(config.Host))
 	AddReportEntry("ServerURL", sanitizedServerURL(config.Host))
-	return nil
-}, func(ctx SpecContext, _ []byte) {
-	// Runs on every parallel process: the clients are package-level variables,
-	// so each process needs its own.
-	config, err := kubernetesConfig()
-	testutil.ExpectNoError(err)
 
+	// Test authentication and fail early if it appears that we are unauthenticated.
 	testutil.InitClients(config)
-
-	// Ask the API server which identity it sees, equivalent to `oc whoami`.
-	// Do this before Ginkgo starts individual checks so bad or anonymous
-	// credentials stop the suite at setup.
 	identity, err := testutil.CoreClient.AuthenticationV1().SelfSubjectReviews().Create(
 		ctx,
 		&authenticationv1.SelfSubjectReview{},
@@ -67,9 +58,18 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	Expect(identity.Status.UserInfo.Groups).NotTo(ContainElement("system:unauthenticated"),
 		"Kubernetes authentication check returned an unauthenticated identity (%q); aborting suite before specs", username)
 
+	return nil
+}, func(ctx SpecContext, _ []byte) {
+	// Runs on every parallel process: the clients are package-level variables,
+	// so each process needs its own. Authentication was already verified on
+	// process #1 above.
+	config, err := kubernetesConfig()
+	testutil.ExpectNoError(err)
+
+	testutil.InitClients(config)
+
 	// Fetch the cluster-wide facts that many checks share (nodes, StorageClasses,
-	// namespaces excluded from workload checks), once per process. Done after
-	// the authentication check so bad credentials are reported as such.
+	// namespaces excluded from workload checks), once per process.
 	testutil.LoadClusterState(ctx)
 })
 
