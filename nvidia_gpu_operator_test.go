@@ -2,12 +2,16 @@ package clustertests
 
 import (
 	"context"
+	"fmt"
+	"slices"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -16,9 +20,9 @@ const (
 	nvidiaGpuOperatorNamespace = "nvidia-gpu-operator"
 )
 
-// clusterPolicyGVR is used only to detect whether the NVIDIA GPU Operator is
-// installed on this cluster; the suite doesn't otherwise check ClusterPolicy
-// resources.
+// clusterPolicyGVR is the NVIDIA GPU Operator's top-level resource. Its
+// presence is also how the suite detects whether the operator is installed on
+// this cluster.
 var clusterPolicyGVR = schema.GroupVersionResource{
 	Group:    "nvidia.com",
 	Version:  "v1",
@@ -49,6 +53,49 @@ var _ = Describe("NvidiaGpuOperator", Label("gpu"), func() {
 				problems = append(problems, node.Name)
 			}
 		}
+		Expect(problems).To(BeEmpty())
+	})
+
+	// ClusterPolicy reports its health as status.state rather than through
+	// standard conditions: "ready" once every operand it deploys is up,
+	// "notReady" while any isn't, and "ignored" for a ClusterPolicy that the
+	// operator is disregarding because another one exists. The operator only
+	// acts on a single ClusterPolicy, so anything other than "ready" is worth
+	// reporting. When the operator sets its "error" condition, that says what
+	// is wrong, so it's included in the failure message.
+	It("has a ready ClusterPolicy", func(ctx SpecContext) {
+		var problems []string
+		count := 0
+		err := eachResource(ctx, clusterPolicyGVR, metav1.ListOptions{}, func(policy *unstructured.Unstructured) error {
+			count++
+			id := objectID(policy)
+
+			state, _, err := unstructured.NestedString(policy.Object, "status", "state")
+			if err != nil {
+				problems = append(problems, fmt.Sprintf("%s: %v", id, err))
+				return nil
+			}
+			if state == "ready" {
+				return nil
+			}
+			if state == "" {
+				state = "<missing>"
+			}
+
+			problem := fmt.Sprintf("%s: state=%s, want ready", id, state)
+			if conditions, err := conditionsOf(policy); err == nil {
+				if failure := apimeta.FindStatusCondition(conditions, "error"); failure != nil &&
+					failure.Status == metav1.ConditionTrue {
+					problem += fmt.Sprintf(" (%s: %s)", failure.Reason, failure.Message)
+				}
+			}
+			problems = append(problems, problem)
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "list ClusterPolicies")
+		Expect(count).NotTo(BeZero(), "no ClusterPolicy found")
+
+		slices.Sort(problems)
 		Expect(problems).To(BeEmpty())
 	})
 
