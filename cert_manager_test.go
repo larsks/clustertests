@@ -1,6 +1,7 @@
 package clustertests
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"time"
@@ -8,6 +9,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -27,6 +29,11 @@ var (
 		Group:    "cert-manager.io",
 		Version:  "v1",
 		Resource: "certificates",
+	}
+	certificateRequestGVR = schema.GroupVersionResource{
+		Group:    "cert-manager.io",
+		Version:  "v1",
+		Resource: "certificaterequests",
 	}
 	issuerGVR = schema.GroupVersionResource{
 		Group:    "cert-manager.io",
@@ -68,6 +75,47 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 		expectAllReady(ctx, certificateGVR, conditionReady)
 	})
 
+	// A CertificateRequest is what a Certificate hands to an issuer, so when
+	// issuance fails, the reason (a rejected ACME order, a denied approval, an
+	// invalid CSR) is recorded here rather than on the Certificate. Failed
+	// requests stay around as history, though, so one is only reported if its
+	// Certificate hasn't since settled (see settledCertificates).
+	It("has no failed certificate requests", func(ctx SpecContext) {
+		settled, err := settledCertificates(ctx)
+		Expect(err).NotTo(HaveOccurred(), "list certificates")
+
+		var problems []string
+		err = eachResource(ctx, certificateRequestGVR, metav1.ListOptions{}, func(request *unstructured.Unstructured) error {
+			if certificateRequestIsStale(request, settled) {
+				return nil
+			}
+			id := objectID(request)
+
+			conditions, err := conditionsOf(request)
+			if err != nil {
+				problems = append(problems, fmt.Sprintf("%s: %v", id, err))
+				return nil
+			}
+
+			ready := apimeta.FindStatusCondition(conditions, conditionReady)
+			for _, failure := range []string{"Denied", "InvalidRequest"} {
+				if condition := apimeta.FindStatusCondition(conditions, failure); condition != nil &&
+					condition.Status == metav1.ConditionTrue {
+					problems = append(problems, fmt.Sprintf("%s: %s (%s)", id, failure, condition.Message))
+					return nil
+				}
+			}
+			if ready != nil && ready.Status == metav1.ConditionFalse && ready.Reason == "Failed" {
+				problems = append(problems, fmt.Sprintf("%s: failed (%s)", id, ready.Message))
+			}
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "list certificate requests")
+
+		slices.Sort(problems)
+		Expect(problems).To(BeEmpty())
+	})
+
 	// A Ready=True condition can lag reality, so check the certificate's
 	// own dates as well.
 	It("has no expired certificates or overdue renewals", func(ctx SpecContext) {
@@ -103,6 +151,44 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 		Expect(problems).To(BeEmpty())
 	})
 })
+
+// certificateNameAnnotation is set by cert-manager on each CertificateRequest
+// it creates on behalf of a Certificate, naming that Certificate.
+const certificateNameAnnotation = "cert-manager.io/certificate-name"
+
+// settledCertificates returns the namespace/name of every Certificate that is
+// Ready and not in the middle of issuing or renewing. A Certificate stays
+// Ready=True while it renews, as long as its current certificate is valid, so
+// Issuing is what tells a renewal that is failing (Issuing=True, still
+// retrying) from one that has finished and left only history behind.
+func settledCertificates(ctx context.Context) (map[string]bool, error) {
+	settled := map[string]bool{}
+	err := eachResource(ctx, certificateGVR, metav1.ListOptions{}, func(certificate *unstructured.Unstructured) error {
+		conditions, err := conditionsOf(certificate)
+		if err != nil {
+			// Leave it unsettled; the Ready condition check reports it.
+			return nil
+		}
+
+		ready := apimeta.IsStatusConditionTrue(conditions, conditionReady)
+		issuing := apimeta.IsStatusConditionTrue(conditions, "Issuing")
+		if ready && !issuing {
+			settled[objectID(certificate)] = true
+		}
+		return nil
+	})
+	return settled, err
+}
+
+// certificateRequestIsStale reports whether request belongs to a Certificate
+// that has settled, which makes it leftover history (for example a failed
+// attempt that a later one replaced) and not a current problem. A request
+// with no owning Certificate, such as one created directly by another
+// controller, is never stale.
+func certificateRequestIsStale(request *unstructured.Unstructured, settled map[string]bool) bool {
+	name, found := request.GetAnnotations()[certificateNameAnnotation]
+	return found && settled[request.GetNamespace()+"/"+name]
+}
 
 // statusTime reads an RFC 3339 timestamp from the named field of an object's
 // status. The bool result is false if the field is absent, as it is for a
