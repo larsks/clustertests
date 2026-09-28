@@ -354,24 +354,90 @@ func conditionProblems(
 	return problems, count, err
 }
 
+// presence says whether a check that spans every resource of some type also
+// needs at least one of them to exist.
+type presence int
+
+const (
+	// noneOK is for resources that may legitimately not exist, such as ones
+	// users create on top of an operator, or a management cluster's hosted
+	// clusters before any have been created. An empty list passes.
+	noneOK presence = iota
+
+	// atLeastOne is for resources the install itself creates. An empty list
+	// fails, since a check that finds nothing to look at would otherwise pass
+	// without checking anything.
+	atLeastOne
+)
+
+// expect fails a spec that found count resources, described by what (for
+// example "clusteroperators.config.openshift.io"), if p requires at least one
+// and none exist.
+func (p presence) expect(what string, count int) {
+	GinkgoHelper()
+
+	if p == atLeastOne {
+		Expect(count).NotTo(BeZero(), "no %s found", what)
+	}
+}
+
 // expectConditions fails unless every resource of the given type, across all
 // namespaces, has every expected condition with the expected status (see
-// conditionProblems). It returns the number of resources checked so callers
-// can insist that at least one exists.
-func expectConditions(ctx context.Context, gvr schema.GroupVersionResource, expected ...conditionExpectation) int {
+// conditionProblems), and unless at least one exists if p is atLeastOne.
+func expectConditions(
+	ctx context.Context, gvr schema.GroupVersionResource, p presence, expected ...conditionExpectation,
+) {
 	GinkgoHelper()
 
 	problems, count, err := conditionProblems(ctx, gvr, expected...)
 	Expect(err).NotTo(HaveOccurred(), "list %s", gvr.Resource)
 	expectNoProblems(problems)
-	return count
+	p.expect(gvr.GroupResource().String(), count)
 }
 
 // expectAllReady fails unless every resource of the given type has a condition
-// of type condType with status True.
-func expectAllReady(ctx context.Context, gvr schema.GroupVersionResource, condType string) {
+// of type condType with status True (and, as for expectConditions, unless at
+// least one exists if p is atLeastOne).
+func expectAllReady(ctx context.Context, gvr schema.GroupVersionResource, p presence, condType string) {
 	GinkgoHelper()
-	expectConditions(ctx, gvr, conditionExpectation{Type: condType, Status: metav1.ConditionTrue})
+	expectConditions(ctx, gvr, p, conditionExpectation{Type: condType, Status: metav1.ConditionTrue})
+}
+
+// expectPhase lists every object of gvr matching opts and fails unless each has
+// status.phase == wantPhase, and unless at least one exists if p is atLeastOne.
+// A missing phase counts as a problem.
+func expectPhase(
+	ctx context.Context, gvr schema.GroupVersionResource, opts metav1.ListOptions, p presence, wantPhase string,
+) {
+	GinkgoHelper()
+
+	var problems []string
+	count := 0
+	err := eachResource(ctx, gvr, opts, func(item *unstructured.Unstructured) error {
+		count++
+		id := objectID(item)
+
+		phase, found, err := unstructured.NestedString(item.Object, "status", "phase")
+		if err != nil {
+			return fmt.Errorf("read phase for %s: %w", id, err)
+		}
+		if !found {
+			phase = "<missing>"
+		}
+		if phase != wantPhase {
+			problems = append(problems, fmt.Sprintf("%s: phase=%s", id, phase))
+		}
+		return nil
+	})
+	Expect(err).NotTo(HaveOccurred(), "list %s", gvr.Resource)
+
+	expectNoProblems(problems)
+
+	what := gvr.GroupResource().String()
+	if opts.LabelSelector != "" {
+		what += fmt.Sprintf(" matching label selector %q", opts.LabelSelector)
+	}
+	p.expect(what, count)
 }
 
 // deploymentCondition returns the named condition, or nil if the deployment

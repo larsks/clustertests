@@ -35,6 +35,6 @@ var _ = Describe("NodeFeatureDiscovery", Label("nfd"), func() {
 	)
 
 	It("has available NodeFeatureDiscovery instances", func(ctx SpecContext) {
-		expectAllReady(ctx, nodeFeatureDiscoveryGVR, "Available")
+		expectAllReady(ctx, nodeFeatureDiscoveryGVR, noneOK, "Available")
 	})
 })

@@ -81,10 +81,9 @@ var _ = Describe("RedHatOpenShiftAI", Label("rhods"), func() {
 	)
 
 	It("has a ready DataScienceCluster", func(ctx SpecContext) {
-		checked := expectConditions(ctx, dataScienceClusterGVR,
+		expectConditions(ctx, dataScienceClusterGVR, atLeastOne,
 			conditionExpectation{Type: conditionReady, Status: metav1.ConditionTrue},
 		)
-		Expect(checked).NotTo(BeZero(), "no DataScienceClusters found")
 	})
 
 	// The operator creates a resource for every component that has

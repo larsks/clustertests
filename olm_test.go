@@ -56,29 +56,9 @@ var _ = Describe("OLM", Label("olm"), func() {
 	})
 
 	It("requires each original ClusterServiceVersion to be Succeeded", func(ctx SpecContext) {
-		var problems []string
-		count := 0
-		err := eachResource(ctx, clusterServiceVersionGVR, metav1.ListOptions{
+		expectPhase(ctx, clusterServiceVersionGVR, metav1.ListOptions{
 			LabelSelector: "!" + clusterServiceVersionCopiedFromLabel,
-		}, func(csv *unstructured.Unstructured) error {
-			count++
-			id := objectID(csv)
-			phase, found, err := unstructured.NestedString(csv.Object, "status", "phase")
-			if err != nil {
-				return fmt.Errorf("read phase for ClusterServiceVersion %s: %w", id, err)
-			}
-			if !found {
-				phase = "<missing>"
-			}
-			if phase != "Succeeded" {
-				problems = append(problems, fmt.Sprintf("%s: phase=%s", id, phase))
-			}
-			return nil
-		})
-		Expect(err).NotTo(HaveOccurred(), "list ClusterServiceVersions across all namespaces")
-		Expect(count).NotTo(BeZero(), "no original ClusterServiceVersions found")
-
-		expectNoProblems(problems)
+		}, atLeastOne, "Succeeded")
 	})
 
 	It("requires every Subscription to be free of catalog and install errors", func(ctx SpecContext) {

@@ -72,15 +72,15 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 	// server, a missing CA secret) is the root cause behind every certificate
 	// that depends on it failing to issue or renew, so report it directly.
 	It("has healthy ClusterIssuers", func(ctx SpecContext) {
-		expectAllReady(ctx, clusterIssuerGVR, conditionReady)
+		expectAllReady(ctx, clusterIssuerGVR, noneOK, conditionReady)
 	})
 
 	It("has healthy Issuers", func(ctx SpecContext) {
-		expectAllReady(ctx, issuerGVR, conditionReady)
+		expectAllReady(ctx, issuerGVR, noneOK, conditionReady)
 	})
 
 	It("has healthy certificates", func(ctx SpecContext) {
-		expectAllReady(ctx, certificateGVR, conditionReady)
+		expectAllReady(ctx, certificateGVR, noneOK, conditionReady)
 	})
 
 	// A CertificateRequest is what a Certificate hands to an issuer, so when

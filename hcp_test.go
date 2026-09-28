@@ -44,7 +44,7 @@ var _ = Describe("HostedControlPlanes", Label("hcp"), func() {
 	// True when any control plane component deployment has unavailable
 	// replicas, which can happen while the API server is still up.
 	It("has available, non-degraded HostedClusters", func(ctx SpecContext) {
-		expectConditions(ctx, hostedClusterGVR,
+		expectConditions(ctx, hostedClusterGVR, noneOK,
 			conditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
 			conditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
 		)
@@ -55,7 +55,7 @@ var _ = Describe("HostedControlPlanes", Label("hcp"), func() {
 	// control plane components. HostedCluster reports on it, but only what
 	// it chooses to copy up.
 	It("has available, non-degraded HostedControlPlanes", func(ctx SpecContext) {
-		expectConditions(ctx, hostedControlPlaneGVR,
+		expectConditions(ctx, hostedControlPlaneGVR, noneOK,
 			conditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
 			conditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
 		)

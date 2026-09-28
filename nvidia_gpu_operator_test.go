@@ -91,7 +91,7 @@ var _ = Describe("NvidiaGpuOperator", Label("gpu"), func() {
 			return nil
 		})
 		Expect(err).NotTo(HaveOccurred(), "list ClusterPolicies")
-		Expect(count).NotTo(BeZero(), "no ClusterPolicy found")
+		atLeastOne.expect(clusterPolicyGVR.GroupResource().String(), count)
 
 		expectNoProblems(problems)
 	})

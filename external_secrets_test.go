@@ -51,14 +51,14 @@ var _ = Describe("ExternalSecretsOperator", Label("secrets"), func() {
 	)
 
 	It("has healthy ClusterSecretStores", func(ctx SpecContext) {
-		expectAllReady(ctx, clusterSecretStoreGVR, conditionReady)
+		expectAllReady(ctx, clusterSecretStoreGVR, noneOK, conditionReady)
 	})
 
 	It("has healthy SecretStores", func(ctx SpecContext) {
-		expectAllReady(ctx, secretStoreGVR, conditionReady)
+		expectAllReady(ctx, secretStoreGVR, noneOK, conditionReady)
 	})
 
 	It("has healthy external secrets", func(ctx SpecContext) {
-		expectAllReady(ctx, externalSecretGVR, conditionReady)
+		expectAllReady(ctx, externalSecretGVR, noneOK, conditionReady)
 	})
 })

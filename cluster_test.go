@@ -98,31 +98,28 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 	It("requires every ClusterOperator to be Available and not Degraded", Label("cluster-operators"), func(ctx SpecContext) {
 		skipIfResourceKindDoesNotExist(clusterOperatorGVR)
 
-		checked := expectConditions(ctx, clusterOperatorGVR,
+		expectConditions(ctx, clusterOperatorGVR, atLeastOne,
 			conditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
 			conditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
 		)
-		Expect(checked).NotTo(BeZero(), "no ClusterOperators found")
 	})
 
 	It("requires ClusterVersion to be Available and not Failing", Label("cluster-version"), func(ctx SpecContext) {
 		skipIfResourceKindDoesNotExist(clusterVersionGVR)
 
-		checked := expectConditions(ctx, clusterVersionGVR,
+		expectConditions(ctx, clusterVersionGVR, atLeastOne,
 			conditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
 			conditionExpectation{Type: "Failing", Status: metav1.ConditionFalse},
 		)
-		Expect(checked).NotTo(BeZero(), "no ClusterVersion found")
 	})
 
 	It("requires every MachineConfigPool to be Updated and not Degraded", Label("machine-config"), func(ctx SpecContext) {
 		skipIfResourceKindDoesNotExist(machineConfigPoolGVR)
 
-		checked := expectConditions(ctx, machineConfigPoolGVR,
+		expectConditions(ctx, machineConfigPoolGVR, atLeastOne,
 			conditionExpectation{Type: "Updated", Status: metav1.ConditionTrue},
 			conditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
 		)
-		Expect(checked).NotTo(BeZero(), "no MachineConfigPools found")
 	})
 
 	// A CertificateSigningRequest with neither condition is awaiting a

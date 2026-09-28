@@ -2,7 +2,6 @@ package clustertests
 
 import (
 	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -85,11 +84,10 @@ var _ = Describe("OpenShiftVirtualization", Label("cnv"), func() {
 	It("has an available, non-degraded HyperConverged", func(ctx SpecContext) {
 		skipIfResourceKindDoesNotExist(hyperConvergedGVR)
 
-		checked := expectConditions(ctx, hyperConvergedGVR,
+		expectConditions(ctx, hyperConvergedGVR, atLeastOne,
 			conditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
 			conditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
 		)
-		Expect(checked).NotTo(BeZero(), "no HyperConverged found")
 	})
 	// HyperConverged summarizes this resource's status, but only after the
 	// fact; checking it directly points at KubeVirt itself when it's the
@@ -97,10 +95,9 @@ var _ = Describe("OpenShiftVirtualization", Label("cnv"), func() {
 	It("has an available, non-degraded KubeVirt", func(ctx SpecContext) {
 		skipIfResourceKindDoesNotExist(kubeVirtGVR)
 
-		checked := expectConditions(ctx, kubeVirtGVR,
+		expectConditions(ctx, kubeVirtGVR, atLeastOne,
 			conditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
 			conditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
 		)
-		Expect(checked).NotTo(BeZero(), "no KubeVirt found")
 	})
 })
