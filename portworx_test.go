@@ -76,6 +76,13 @@ var _ = Describe("Portworx", Label("portworx"), func() {
 		Entry("px-pure-csi-telemetry-registration", "px-pure-csi-telemetry-registration"),
 	)
 
+	DescribeTable("has available daemonset", func(ctx SpecContext, name string) {
+		daemonsetIsAvailableByName(ctx, portworxNamespace, name)
+	},
+		Entry("px-pure-csi-node", "px-pure-csi-node"),
+		Entry("px-pure-csi-telemetry", "px-pure-csi-telemetry"),
+	)
+
 	It("has a healthy StorageCluster", func(ctx SpecContext) {
 		count := expectPhase(ctx, storageClusterGVR, "Running")
 		Expect(count).NotTo(BeZero(), "no StorageClusters found")
