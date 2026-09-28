@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -205,6 +206,53 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 					problems = append(problems, fmt.Sprintf(
 						"%s: container %s is %s (%d restarts)",
 						id, status.Name, status.State.Waiting.Reason, status.RestartCount,
+					))
+				}
+			}
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "list pods across all namespaces")
+
+		slices.Sort(problems)
+		Expect(problems).To(BeEmpty())
+	})
+
+	// The scheduler reports Unschedulable while it is still trying, so a pod
+	// caught moments after creation, or while the cluster autoscaler is
+	// adding a node, isn't a problem. Only one that has been unschedulable
+	// longer than the timeout is. Pods held back on purpose by a scheduling
+	// gate report a different reason and aren't flagged.
+	It("requires no pods to be stuck unschedulable", Label("pods"), func(ctx SpecContext) {
+		timeout := durationFromEnv("UNSCHEDULABLE_POD_TIMEOUT", 10*time.Minute)
+		now := time.Now()
+
+		listPods := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+			return coreClient.CoreV1().Pods(metav1.NamespaceAll).List(ctx, opts)
+		})
+		listPods.PageSize = listPageSize
+
+		var problems []string
+		err := listPods.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
+			pod := obj.(*corev1.Pod)
+			if pod.Status.Phase != corev1.PodPending || pod.DeletionTimestamp != nil {
+				return nil
+			}
+
+			for _, condition := range pod.Status.Conditions {
+				if condition.Type != corev1.PodScheduled ||
+					condition.Status != corev1.ConditionFalse ||
+					condition.Reason != corev1.PodReasonUnschedulable {
+					continue
+				}
+
+				since := condition.LastTransitionTime.Time
+				if since.IsZero() {
+					since = pod.CreationTimestamp.Time
+				}
+				if age := now.Sub(since); age > timeout {
+					problems = append(problems, fmt.Sprintf(
+						"%s/%s: unschedulable for %s (%s)",
+						pod.Namespace, pod.Name, age.Round(time.Second), condition.Message,
 					))
 				}
 			}

@@ -53,6 +53,17 @@ just test --as system:admin
 
 [just]: https://just.systems/
 
+## Tuning thresholds
+
+Some checks only report a problem once it has persisted for a while, so that a
+freshly created object isn't a spurious failure. These durations can be
+overridden with environment variables, using Go duration syntax (for example
+`30m`):
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `UNSCHEDULABLE_POD_TIMEOUT` | `10m` | How long a pod may be unschedulable before it is reported |
+
 ## Rendering test results
 
 Ginkgo can produce tests results in a Junit XML-formatted file:

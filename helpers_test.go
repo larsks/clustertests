@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -403,6 +404,22 @@ func envOrDefault(name, def string) string {
 		return value
 	}
 	return def
+}
+
+// durationFromEnv returns the value of the named environment variable parsed
+// as a Go duration (for example "10m"), or def if it's unset or empty. A value
+// that doesn't parse fails the spec, rather than silently falling back to the
+// default and hiding a typo.
+func durationFromEnv(name string, def time.Duration) time.Duration {
+	GinkgoHelper()
+
+	value := envOrDefault(name, "")
+	if value == "" {
+		return def
+	}
+	duration, err := time.ParseDuration(value)
+	Expect(err).NotTo(HaveOccurred(), "parse %s=%q as a duration", name, value)
+	return duration
 }
 
 func statefulSetIsAvailable(statefulSet *appsv1.StatefulSet) {
