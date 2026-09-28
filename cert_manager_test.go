@@ -28,6 +28,16 @@ var (
 		Version:  "v1",
 		Resource: "certificates",
 	}
+	issuerGVR = schema.GroupVersionResource{
+		Group:    "cert-manager.io",
+		Version:  "v1",
+		Resource: "issuers",
+	}
+	clusterIssuerGVR = schema.GroupVersionResource{
+		Group:    "cert-manager.io",
+		Version:  "v1",
+		Resource: "clusterissuers",
+	}
 )
 
 var _ = Describe("CertManager", Label("cert-manager"), func() {
@@ -42,6 +52,17 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 		Entry("cert-manager-cainjector", "cert-manager-cainjector"),
 		Entry("cert-manager-webhook", "cert-manager-webhook"),
 	)
+
+	// An Issuer that isn't Ready (bad credentials, an unreachable ACME
+	// server, a missing CA secret) is the root cause behind every certificate
+	// that depends on it failing to issue or renew, so report it directly.
+	It("has healthy ClusterIssuers", func(ctx SpecContext) {
+		expectAllReady(ctx, clusterIssuerGVR, conditionReady)
+	})
+
+	It("has healthy Issuers", func(ctx SpecContext) {
+		expectAllReady(ctx, issuerGVR, conditionReady)
+	})
 
 	It("has healthy certificates", func(ctx SpecContext) {
 		expectAllReady(ctx, certificateGVR, conditionReady)
