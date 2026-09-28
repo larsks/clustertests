@@ -213,10 +213,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 			if isExcludedNamespace(ctx, statefulSet.Namespace) {
 				return nil
 			}
-			desired := int32(1)
-			if statefulSet.Spec.Replicas != nil {
-				desired = *statefulSet.Spec.Replicas
-			}
+			desired := desiredReplicas(statefulSet.Spec.Replicas)
 			if statefulSet.DeletionTimestamp == nil && statefulSet.Status.ReadyReplicas < desired {
 				problems = append(problems, fmt.Sprintf(
 					"statefulset %s: %d of %d replicas ready",
@@ -297,22 +294,19 @@ func eachPod(ctx context.Context, fn func(*corev1.Pod) error) error {
 // available, or returns "" if it does (or is scaled to zero, or being
 // deleted).
 func deploymentProblem(deployment *appsv1.Deployment) string {
-	desired := int32(1)
-	if deployment.Spec.Replicas != nil {
-		desired = *deployment.Spec.Replicas
-	}
+	desired := desiredReplicas(deployment.Spec.Replicas)
 	if desired == 0 || deployment.DeletionTimestamp != nil {
 		return ""
 	}
 
 	id := "deployment " + objectID(deployment)
-	progressing := deploymentCondition(deployment, appsv1.DeploymentProgressing)
+	stuckMessage, stuck := deploymentRolloutStuck(deployment)
 	available := deploymentCondition(deployment, appsv1.DeploymentAvailable)
 	status := deployment.Status
 
 	switch {
-	case progressing != nil && progressing.Status == corev1.ConditionFalse && progressing.Reason == "ProgressDeadlineExceeded":
-		return fmt.Sprintf("%s: rollout is stuck: %s", id, progressing.Message)
+	case stuck:
+		return fmt.Sprintf("%s: rollout is stuck: %s", id, stuckMessage)
 	case available != nil && available.Status != corev1.ConditionTrue:
 		return fmt.Sprintf("%s: Available=%s (%s: %s)", id, available.Status, available.Reason, available.Message)
 	case status.Replicas == desired && status.UpdatedReplicas == desired && status.AvailableReplicas < desired:

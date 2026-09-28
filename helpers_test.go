@@ -407,27 +407,45 @@ func deploymentCondition(
 	return nil
 }
 
+// deploymentRolloutStuck reports whether the deployment's rollout has given
+// up, along with the Progressing condition's message explaining why (empty if
+// it hasn't). Progressing=True is the normal steady state once a rollout has
+// ever succeeded; it only turns False, with the ProgressDeadlineExceeded
+// reason, when a rollout has been stuck longer than
+// spec.progressDeadlineSeconds (600s by default).
+func deploymentRolloutStuck(deployment *appsv1.Deployment) (message string, stuck bool) {
+	progressing := deploymentCondition(deployment, appsv1.DeploymentProgressing)
+	if progressing != nil && progressing.Status == corev1.ConditionFalse &&
+		progressing.Reason == "ProgressDeadlineExceeded" {
+		return progressing.Message, true
+	}
+	return "", false
+}
+
+// desiredReplicas returns the replica count that a Deployment or StatefulSet
+// asks for. spec.replicas defaults to 1 when unset.
+func desiredReplicas(replicas *int32) int32 {
+	if replicas == nil {
+		return 1
+	}
+	return *replicas
+}
+
 // deploymentIsAvailable asserts whether the specified deployment has an Available=True condition.
 func deploymentIsAvailable(deployment *appsv1.Deployment) {
 	GinkgoHelper()
 
 	id := objectID(deployment)
 
-	Expect(deployment.Spec.Replicas).ToNot(BeNil())
-	desired := *deployment.Spec.Replicas
+	desired := desiredReplicas(deployment.Spec.Replicas)
 	Expect(desired).To(BeNumerically(">", 0), "deployment %s is scaled to 0 replicas", id)
 
 	available := deploymentCondition(deployment, appsv1.DeploymentAvailable)
 	Expect(available).NotTo(BeNil(), "deployment %s has no Available condition", id)
 	Expect(available.Status).To(Equal(corev1.ConditionTrue), "deployment %s is not available", id)
 
-	// Progressing=True is the normal steady state once a rollout has ever
-	// succeeded; it only turns False, with this reason, when a rollout has
-	// been stuck longer than spec.progressDeadlineSeconds (600s by default).
-	if progressing := deploymentCondition(deployment, appsv1.DeploymentProgressing); progressing != nil {
-		stuck := progressing.Status == corev1.ConditionFalse && progressing.Reason == "ProgressDeadlineExceeded"
-		Expect(stuck).To(BeFalse(), "deployment %s rollout is stuck: %s", id, progressing.Message)
-	}
+	stuckMessage, stuck := deploymentRolloutStuck(deployment)
+	Expect(stuck).To(BeFalse(), "deployment %s rollout is stuck: %s", id, stuckMessage)
 
 	Expect(deployment.Status.ObservedGeneration).To(
 		BeNumerically(">=", deployment.Generation),
@@ -474,8 +492,7 @@ func statefulSetIsAvailable(statefulSet *appsv1.StatefulSet) {
 		BeNumerically(">=", statefulSet.Generation),
 		"statefulset %s status has not observed its current generation", id,
 	)
-	Expect(statefulSet.Spec.Replicas).NotTo(BeNil())
-	desired := *statefulSet.Spec.Replicas
+	desired := desiredReplicas(statefulSet.Spec.Replicas)
 	Expect(statefulSet.Status.ReadyReplicas).To(
 		Equal(desired),
 		"statefulset %s ready replicas", id,
