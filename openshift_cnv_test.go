@@ -32,6 +32,15 @@ var hyperConvergedGVR = schema.GroupVersionResource{
 	Resource: "hyperconvergeds",
 }
 
+// kubeVirtGVR is the KubeVirt resource that virt-operator reconciles into the
+// virt-api, virt-controller, and virt-handler components. HyperConverged
+// creates and manages one, but a plain KubeVirt install has one too.
+var kubeVirtGVR = schema.GroupVersionResource{
+	Group:    "kubevirt.io",
+	Version:  "v1",
+	Resource: "kubevirts",
+}
+
 var _ = Describe("OpenShiftVirtualization", Label("cnv"), func() {
 	BeforeEach(func(ctx SpecContext) {
 		skipIfResourceKindDoesNotExist(virtualMachineGVR)
@@ -85,5 +94,17 @@ var _ = Describe("OpenShiftVirtualization", Label("cnv"), func() {
 			conditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
 		)
 		Expect(checked).NotTo(BeZero(), "no HyperConverged found")
+	})
+	// HyperConverged summarizes this resource's status, but only after the
+	// fact; checking it directly points at KubeVirt itself when it's the
+	// component in trouble, and covers installs that have no HyperConverged.
+	It("has an available, non-degraded KubeVirt", func(ctx SpecContext) {
+		skipIfResourceKindDoesNotExist(kubeVirtGVR)
+
+		checked := expectConditions(ctx, kubeVirtGVR,
+			conditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
+			conditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
+		)
+		Expect(checked).NotTo(BeZero(), "no KubeVirt found")
 	})
 })
