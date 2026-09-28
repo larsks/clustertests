@@ -3,6 +3,7 @@ package clustertests
 import (
 	"flag"
 	"fmt"
+	"net/url"
 	"testing"
 	"time"
 
@@ -37,6 +38,11 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	config, err := kubernetesConfig()
 	Expect(err).NotTo(HaveOccurred())
 
+	// Record the target cluster in the spec output, which Ginkgo includes in
+	// the JUnit report, so a report identifies the cluster it came from.
+	//GinkgoWriter.Printf("[[KUBERNETES_SERVER_URL|%s]]\n", sanitizedServerURL(config.Host))
+	AddReportEntry("ServerURL", sanitizedServerURL(config.Host))
+
 	coreClient, err = kubernetes.NewForConfig(config)
 	Expect(err).NotTo(HaveOccurred(), "create Kubernetes client")
 
@@ -59,6 +65,22 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	Expect(identity.Status.UserInfo.Groups).NotTo(ContainElement("system:unauthenticated"),
 		"Kubernetes authentication check returned an unauthenticated identity (%q); aborting suite before specs", username)
 })
+
+// sanitizedServerURL returns host reduced to scheme, host and port, dropping
+// any userinfo, path, query or fragment that could carry credentials. If host
+// cannot be parsed into a URL with a host, a placeholder is returned rather
+// than the raw value.
+func sanitizedServerURL(host string) string {
+	u, err := url.Parse(host)
+	if err != nil || u.Host == "" {
+		// rest.Config.Host may be a bare "host:port" with no scheme.
+		u, err = url.Parse("//" + host)
+		if err != nil || u.Host == "" {
+			return "<unparseable>"
+		}
+	}
+	return (&url.URL{Scheme: u.Scheme, Host: u.Host}).String()
+}
 
 // kubernetesConfig loads client configuration the same way kubectl does: an
 // explicit KUBECONFIG or the default kubeconfig file takes precedence, and
