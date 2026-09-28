@@ -40,6 +40,11 @@ var (
 		Version:  "v1",
 		Resource: "orders",
 	}
+	challengeGVR = schema.GroupVersionResource{
+		Group:    "acme.cert-manager.io",
+		Version:  "v1",
+		Resource: "challenges",
+	}
 	issuerGVR = schema.GroupVersionResource{
 		Group:    "cert-manager.io",
 		Version:  "v1",
@@ -143,7 +148,7 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 				return nil
 			}
 			if !slices.Contains([]string{"invalid", "expired", "errored"}, state) ||
-				ownedByStaleRequest(order, staleRequests) {
+				ownedByStale(order, "CertificateRequest", staleRequests) {
 				return nil
 			}
 
@@ -152,6 +157,59 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 			return nil
 		})
 		Expect(err).NotTo(HaveOccurred(), "list ACME orders")
+
+		slices.Sort(problems)
+		Expect(problems).To(BeEmpty())
+	})
+
+	// An ACME Challenge is the proof of domain control that the ACME server
+	// asks for, via an HTTP or DNS record. A challenge that has ended in a
+	// failed state won't recover, and one that stays pending is stuck, most
+	// often because the record can't be reached or created, in which case
+	// status.reason holds the failing self-check. Challenges are only
+	// expected to be pending for as long as it takes the record to propagate,
+	// so that is allowed for before one is reported. As with Orders, ones
+	// belonging to a settled Certificate are ignored.
+	It("has no failed or stuck ACME challenges", func(ctx SpecContext) {
+		skipIfResourceKindDoesNotExist(challengeGVR)
+
+		timeout := durationFromEnv("CHALLENGE_PENDING_TIMEOUT", 10*time.Minute)
+		now := time.Now()
+
+		settled, err := settledCertificates(ctx)
+		Expect(err).NotTo(HaveOccurred(), "list certificates")
+		staleRequests, err := staleCertificateRequests(ctx, settled)
+		Expect(err).NotTo(HaveOccurred(), "list certificate requests")
+		staleOrderSet, err := staleOrders(ctx, staleRequests)
+		Expect(err).NotTo(HaveOccurred(), "list ACME orders")
+
+		var problems []string
+		err = eachResource(ctx, challengeGVR, metav1.ListOptions{}, func(challenge *unstructured.Unstructured) error {
+			id := objectID(challenge)
+
+			state, _, err := unstructured.NestedString(challenge.Object, "status", "state")
+			if err != nil {
+				problems = append(problems, fmt.Sprintf("%s: %v", id, err))
+				return nil
+			}
+			if ownedByStale(challenge, "Order", staleOrderSet) {
+				return nil
+			}
+
+			reason, _, _ := unstructured.NestedString(challenge.Object, "status", "reason")
+			switch state {
+			case "invalid", "expired", "errored":
+				problems = append(problems, fmt.Sprintf("%s: state=%s (%s)", id, state, reason))
+			case "", "pending":
+				if age := now.Sub(challenge.GetCreationTimestamp().Time); age > timeout {
+					problems = append(problems, fmt.Sprintf(
+						"%s: still pending after %s (%s)", id, age.Round(time.Second), reason,
+					))
+				}
+			}
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "list ACME challenges")
 
 		slices.Sort(problems)
 		Expect(problems).To(BeEmpty())
@@ -245,16 +303,30 @@ func staleCertificateRequests(ctx context.Context, settled map[string]bool) (map
 	return stale, err
 }
 
-// ownedByStaleRequest reports whether obj is owned by a CertificateRequest in
-// stale. cert-manager creates each ACME Order with an owner reference to the
-// CertificateRequest it serves.
-func ownedByStaleRequest(obj *unstructured.Unstructured, stale map[string]bool) bool {
+// ownedByStale reports whether obj has an owner reference to an object of the
+// given kind that is in stale. cert-manager creates each ACME Order with an
+// owner reference to the CertificateRequest it serves, and each Challenge with
+// one to its Order.
+func ownedByStale(obj *unstructured.Unstructured, ownerKind string, stale map[string]bool) bool {
 	for _, owner := range obj.GetOwnerReferences() {
-		if owner.Kind == "CertificateRequest" && stale[obj.GetNamespace()+"/"+owner.Name] {
+		if owner.Kind == ownerKind && stale[obj.GetNamespace()+"/"+owner.Name] {
 			return true
 		}
 	}
 	return false
+}
+
+// staleOrders returns the namespace/name of every ACME Order owned by a stale
+// CertificateRequest.
+func staleOrders(ctx context.Context, staleRequests map[string]bool) (map[string]bool, error) {
+	stale := map[string]bool{}
+	err := eachResource(ctx, orderGVR, metav1.ListOptions{}, func(order *unstructured.Unstructured) error {
+		if ownedByStale(order, "CertificateRequest", staleRequests) {
+			stale[objectID(order)] = true
+		}
+		return nil
+	})
+	return stale, err
 }
 
 // statusTime reads an RFC 3339 timestamp from the named field of an object's
