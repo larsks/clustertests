@@ -259,16 +259,16 @@ type conditionExpectation struct {
 	Status metav1.ConditionStatus
 }
 
-// expectConditions lists every resource of the given type across all
-// namespaces and fails unless each has every expected condition with the
-// expected status. A missing condition counts as a failure. Offenders are
-// reported as namespace/name along with the condition's reason and message. A
-// condition whose observedGeneration is older than the resource's generation
-// is treated as stale. It returns the number of resources checked so callers
-// can insist that at least one exists.
-func expectConditions(ctx context.Context, gvr schema.GroupVersionResource, expected ...conditionExpectation) int {
-	GinkgoHelper()
-
+// conditionProblems lists every resource of the given type across all
+// namespaces and returns a sorted description of each that lacks an expected
+// condition with the expected status, along with the number of resources
+// checked. A missing condition counts as a problem. Offenders are reported as
+// namespace/name along with the condition's reason and message. A condition
+// whose observedGeneration is older than the resource's generation is treated
+// as stale.
+func conditionProblems(
+	ctx context.Context, gvr schema.GroupVersionResource, expected ...conditionExpectation,
+) ([]string, int, error) {
 	var problems []string
 	count := 0
 	err := eachResource(ctx, gvr, metav1.ListOptions{}, func(obj *unstructured.Unstructured) error {
@@ -300,9 +300,20 @@ func expectConditions(ctx context.Context, gvr schema.GroupVersionResource, expe
 		}
 		return nil
 	})
-	Expect(err).NotTo(HaveOccurred(), "list %s", gvr.Resource)
 
 	slices.Sort(problems)
+	return problems, count, err
+}
+
+// expectConditions fails unless every resource of the given type, across all
+// namespaces, has every expected condition with the expected status (see
+// conditionProblems). It returns the number of resources checked so callers
+// can insist that at least one exists.
+func expectConditions(ctx context.Context, gvr schema.GroupVersionResource, expected ...conditionExpectation) int {
+	GinkgoHelper()
+
+	problems, count, err := conditionProblems(ctx, gvr, expected...)
+	Expect(err).NotTo(HaveOccurred(), "list %s", gvr.Resource)
 	Expect(problems).To(BeEmpty())
 	return count
 }
