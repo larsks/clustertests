@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -404,6 +405,21 @@ func envOrDefault(name, def string) string {
 		return value
 	}
 	return def
+}
+
+// intFromEnv returns the value of the named environment variable parsed as an
+// integer, or def if it's unset or empty. Like durationFromEnv, a value that
+// doesn't parse fails the spec.
+func intFromEnv(name string, def int) int {
+	GinkgoHelper()
+
+	value := envOrDefault(name, "")
+	if value == "" {
+		return def
+	}
+	number, err := strconv.Atoi(value)
+	Expect(err).NotTo(HaveOccurred(), "parse %s=%q as an integer", name, value)
+	return number
 }
 
 // durationFromEnv returns the value of the named environment variable parsed

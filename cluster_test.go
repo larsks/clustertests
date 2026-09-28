@@ -36,6 +36,10 @@ var (
 	}
 )
 
+// badWaitingReasons are container waiting reasons that mean a container won't
+// recover on its own.
+var badWaitingReasons = []string{"CrashLoopBackOff", "ImagePullBackOff", "ErrImagePull"}
+
 var _ = Describe("cluster health", Label("cluster"), func() {
 	It("requires every node to be schedulable, Ready, and free of resource pressure or network problems", Label("nodes"), func(ctx SpecContext) {
 		nodes := allNodes(ctx)
@@ -173,8 +177,6 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 	// recover on its own. Pending and Running pods are otherwise left alone,
 	// since a container can restart occasionally without being unhealthy.
 	It("requires no pods to be Failed, crash-looping, or unable to pull their image", Label("pods"), func(ctx SpecContext) {
-		badWaitingReasons := []string{"CrashLoopBackOff", "ImagePullBackOff", "ErrImagePull"}
-
 		listPods := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
 			return coreClient.CoreV1().Pods(metav1.NamespaceAll).List(ctx, opts)
 		})
@@ -253,6 +255,63 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 					problems = append(problems, fmt.Sprintf(
 						"%s/%s: unschedulable for %s (%s)",
 						pod.Namespace, pod.Name, age.Round(time.Second), condition.Message,
+					))
+				}
+			}
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "list pods across all namespaces")
+
+		slices.Sort(problems)
+		Expect(problems).To(BeEmpty())
+	})
+
+	// CrashLoopBackOff is only visible while a container is between
+	// restarts, and a container that gets OOMKilled and comes back up looks
+	// healthy the rest of the time. So look at why each container last
+	// terminated instead: one killed for exceeding its memory limit, or one
+	// that keeps restarting, recently enough to still be relevant, is
+	// flapping even if it's Running right now. Containers currently waiting
+	// for a reason the check above already reports aren't repeated here.
+	It("requires no containers to have been recently OOMKilled or restarted repeatedly", Label("pods"), func(ctx SpecContext) {
+		window := durationFromEnv("RECENT_TERMINATION_WINDOW", time.Hour)
+		restartThreshold := int32(intFromEnv("POD_RESTART_THRESHOLD", 5))
+		now := time.Now()
+
+		listPods := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+			return coreClient.CoreV1().Pods(metav1.NamespaceAll).List(ctx, opts)
+		})
+		listPods.PageSize = listPageSize
+
+		var problems []string
+		err := listPods.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
+			pod := obj.(*corev1.Pod)
+
+			containerStatuses := append(
+				append([]corev1.ContainerStatus{}, pod.Status.InitContainerStatuses...),
+				pod.Status.ContainerStatuses...,
+			)
+			for _, status := range containerStatuses {
+				if status.State.Waiting != nil && slices.Contains(badWaitingReasons, status.State.Waiting.Reason) {
+					continue
+				}
+
+				last := status.LastTerminationState.Terminated
+				if last == nil || now.Sub(last.FinishedAt.Time) > window {
+					continue
+				}
+
+				id := fmt.Sprintf("%s/%s: container %s", pod.Namespace, pod.Name, status.Name)
+				switch {
+				case last.Reason == "OOMKilled":
+					problems = append(problems, fmt.Sprintf(
+						"%s was OOMKilled at %s (%d restarts)",
+						id, last.FinishedAt.Format(time.RFC3339), status.RestartCount,
+					))
+				case status.RestartCount >= restartThreshold:
+					problems = append(problems, fmt.Sprintf(
+						"%s has restarted %d times, most recently at %s (%s, exit code %d)",
+						id, status.RestartCount, last.FinishedAt.Format(time.RFC3339), last.Reason, last.ExitCode,
 					))
 				}
 			}
