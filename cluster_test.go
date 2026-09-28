@@ -88,7 +88,7 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 			if phase == "" {
 				phase = "<missing>"
 			}
-			problems = append(problems, fmt.Sprintf("%s/%s: phase=%s", claim.Namespace, claim.Name, phase))
+			problems = append(problems, fmt.Sprintf("%s: phase=%s", testutil.ObjectID(claim), phase))
 			return nil
 		})
 		testutil.ExpectNoError(err, "list PersistentVolumeClaims across all namespaces")

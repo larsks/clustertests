@@ -92,8 +92,8 @@ var _ = Describe("workload health", Label("cluster"), func() {
 				}
 				if age := now.Sub(since); age > timeout {
 					problems = append(problems, fmt.Sprintf(
-						"%s/%s: unschedulable for %s (%s)",
-						pod.Namespace, pod.Name, age.Round(time.Second), condition.Message,
+						"%s: unschedulable for %s (%s)",
+						testutil.ObjectID(pod), age.Round(time.Second), condition.Message,
 					))
 				}
 			}
@@ -136,7 +136,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 					continue
 				}
 
-				id := fmt.Sprintf("%s/%s: container %s", pod.Namespace, pod.Name, status.Name)
+				id := fmt.Sprintf("%s: container %s", testutil.ObjectID(pod), status.Name)
 				switch {
 				case last.Reason == "OOMKilled":
 					problems = append(problems, fmt.Sprintf(
@@ -173,8 +173,8 @@ var _ = Describe("workload health", Label("cluster"), func() {
 
 			if overdue := now.Sub(pod.DeletionTimestamp.Time); overdue > timeout {
 				problem := fmt.Sprintf(
-					"%s/%s: terminating for %s past its deadline (node %s",
-					pod.Namespace, pod.Name, overdue.Round(time.Second), pod.Spec.NodeName,
+					"%s: terminating for %s past its deadline (node %s",
+					testutil.ObjectID(pod), overdue.Round(time.Second), pod.Spec.NodeName,
 				)
 				if len(pod.Finalizers) > 0 {
 					problem += ", finalizers " + strings.Join(pod.Finalizers, ",")

@@ -97,7 +97,7 @@ func DeploymentIsAvailableIfPresent(ctx context.Context, namespace, name string)
 	GinkgoHelper()
 	deployment, err := CoreClient.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
-		Skip(fmt.Sprintf("deployment %s/%s not found", namespace, name))
+		Skip(fmt.Sprintf("deployment %s not found", ObjectID(&metav1.ObjectMeta{Namespace: namespace, Name: name})))
 	}
 	ExpectNoError(err)
 	deploymentIsAvailable(deployment)
