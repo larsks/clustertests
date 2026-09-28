@@ -27,7 +27,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 	It("requires no pods to be Failed, crash-looping, or unable to pull their image", Label("pods"), func(ctx SpecContext) {
 		var problems []string
 		err := eachPod(ctx, func(pod *corev1.Pod) error {
-			if isExcludedNamespace(ctx, pod.Namespace) {
+			if isExcludedNamespace(pod.Namespace) {
 				return nil
 			}
 			id := pod.Namespace + "/" + pod.Name
@@ -75,7 +75,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		var problems []string
 		err := eachPod(ctx, func(pod *corev1.Pod) error {
 			if pod.Status.Phase != corev1.PodPending || pod.DeletionTimestamp != nil ||
-				isExcludedNamespace(ctx, pod.Namespace) {
+				isExcludedNamespace(pod.Namespace) {
 				return nil
 			}
 
@@ -118,7 +118,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 
 		var problems []string
 		err := eachPod(ctx, func(pod *corev1.Pod) error {
-			if isExcludedNamespace(ctx, pod.Namespace) {
+			if isExcludedNamespace(pod.Namespace) {
 				return nil
 			}
 
@@ -167,7 +167,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 
 		var problems []string
 		err := eachPod(ctx, func(pod *corev1.Pod) error {
-			if pod.DeletionTimestamp == nil || isExcludedNamespace(ctx, pod.Namespace) {
+			if pod.DeletionTimestamp == nil || isExcludedNamespace(pod.Namespace) {
 				return nil
 			}
 
@@ -199,7 +199,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		var problems []string
 
 		err := eachItem(ctx, coreClient.AppsV1().Deployments(metav1.NamespaceAll).List, metav1.ListOptions{}, func(deployment *appsv1.Deployment) error {
-			if isExcludedNamespace(ctx, deployment.Namespace) {
+			if isExcludedNamespace(deployment.Namespace) {
 				return nil
 			}
 			if problem := deploymentProblem(deployment); problem != "" {
@@ -210,7 +210,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		Expect(err).NotTo(HaveOccurred(), "list Deployments across all namespaces")
 
 		err = eachItem(ctx, coreClient.AppsV1().StatefulSets(metav1.NamespaceAll).List, metav1.ListOptions{}, func(statefulSet *appsv1.StatefulSet) error {
-			if isExcludedNamespace(ctx, statefulSet.Namespace) {
+			if isExcludedNamespace(statefulSet.Namespace) {
 				return nil
 			}
 			desired := desiredReplicas(statefulSet.Spec.Replicas)
@@ -225,7 +225,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		Expect(err).NotTo(HaveOccurred(), "list StatefulSets across all namespaces")
 
 		err = eachItem(ctx, coreClient.AppsV1().DaemonSets(metav1.NamespaceAll).List, metav1.ListOptions{}, func(daemonSet *appsv1.DaemonSet) error {
-			if isExcludedNamespace(ctx, daemonSet.Namespace) {
+			if isExcludedNamespace(daemonSet.Namespace) {
 				return nil
 			}
 			if daemonSet.DeletionTimestamp == nil && daemonSet.Status.NumberAvailable < daemonSet.Status.DesiredNumberScheduled {
@@ -258,7 +258,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 
 		var problems []string
 		err = eachItem(ctx, coreClient.BatchV1().Jobs(metav1.NamespaceAll).List, metav1.ListOptions{}, func(job *batchv1.Job) error {
-			if isExcludedNamespace(ctx, job.Namespace) {
+			if isExcludedNamespace(job.Namespace) {
 				return nil
 			}
 			for _, condition := range job.Status.Conditions {

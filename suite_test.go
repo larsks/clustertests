@@ -71,6 +71,11 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 		"Kubernetes authentication check returned an unauthenticated identity; aborting suite before specs")
 	Expect(identity.Status.UserInfo.Groups).NotTo(ContainElement("system:unauthenticated"),
 		"Kubernetes authentication check returned an unauthenticated identity (%q); aborting suite before specs", username)
+
+	// Fetch the cluster-wide facts that many checks share (nodes, StorageClasses,
+	// namespaces excluded from workload checks), once per process. Done after
+	// the authentication check so bad credentials are reported as such.
+	loadClusterState(ctx)
 })
 
 // sanitizedServerURL returns host reduced to scheme, host and port, dropping

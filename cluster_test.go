@@ -1,7 +1,6 @@
 package clustertests
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -35,7 +34,7 @@ var (
 
 var _ = Describe("cluster health", Label("cluster"), func() {
 	It("requires every node to be schedulable, Ready, and free of resource pressure or network problems", Label("nodes"), func(ctx SpecContext) {
-		nodes := allNodes(ctx)
+		nodes := clusterNodes
 		Expect(nodes).NotTo(BeEmpty(), "no nodes found")
 
 		var problems []string
@@ -79,8 +78,8 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 	It("requires every PersistentVolumeClaim to be Bound", Label("storage"), func(ctx SpecContext) {
 		var problems []string
 		err := eachItem(ctx, coreClient.CoreV1().PersistentVolumeClaims(metav1.NamespaceAll).List, metav1.ListOptions{}, func(claim *corev1.PersistentVolumeClaim) error {
-			if claim.Status.Phase == corev1.ClaimBound || isExcludedNamespace(ctx, claim.Namespace) ||
-				pvcAwaitingFirstConsumer(ctx, claim) {
+			if claim.Status.Phase == corev1.ClaimBound || isExcludedNamespace(claim.Namespace) ||
+				pvcAwaitingFirstConsumer(claim) {
 				return nil
 			}
 
@@ -205,14 +204,12 @@ const pvcSelectedNodeAnnotation = "volume.kubernetes.io/selected-node"
 // ordinary WaitForFirstConsumer wait rather than a stuck binding: its
 // StorageClass defers binding until a consumer pod is scheduled, and no
 // consumer has been scheduled against it yet.
-func pvcAwaitingFirstConsumer(ctx context.Context, claim *corev1.PersistentVolumeClaim) bool {
-	GinkgoHelper()
-
-	className := defaultStorageClassName(ctx)
+func pvcAwaitingFirstConsumer(claim *corev1.PersistentVolumeClaim) bool {
+	className := defaultStorageClassName()
 	if claim.Spec.StorageClassName != nil {
 		className = *claim.Spec.StorageClassName
 	}
-	if className == "" || !storageClassIsWaitForFirstConsumer(ctx, className) {
+	if className == "" || !storageClassIsWaitForFirstConsumer(className) {
 		return false
 	}
 

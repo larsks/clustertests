@@ -91,36 +91,48 @@ func listNodes(ctx context.Context, opts metav1.ListOptions) ([]corev1.Node, err
 	return nodes, err
 }
 
-// cachedNodes holds every node in the cluster, fetched once per test process.
-// A nil value means the fetch hasn't happened yet. Every check that needs
-// nodes, whether all of them or a label-selected subset, goes through this
-// one cache instead of each making its own List call: node counts are small
-// enough (unlike pods, which are streamed instead of cached) that holding the
-// full list in memory is cheap, and every consumer just filters it locally.
-var cachedNodes *[]corev1.Node
+// Cluster-wide facts that many checks share. They are fetched once per test
+// process by loadClusterState, in the per-process half of
+// SynchronizedBeforeSuite, rather than by each check that needs them, so a
+// failure to fetch one aborts the suite at setup instead of failing whichever
+// specs happened to ask first. Nodes, StorageClasses and namespaces are few
+// enough (unlike pods, which are streamed instead of cached) that holding them
+// whole is cheap, and every consumer just filters them locally. They are a
+// snapshot from suite start: a node that joins, leaves, or gets relabeled
+// later in the same run won't be reflected.
+var (
+	// clusterNodes is every node in the cluster.
+	clusterNodes []corev1.Node
 
-// allNodes returns every node in the cluster, fetching and caching the full,
-// unfiltered list on first use. Like the other per-process caches in this
-// file, this is a snapshot from the first call: a node that joins, leaves, or
-// gets relabeled later in the same run won't be reflected.
-func allNodes(ctx context.Context) []corev1.Node {
+	// clusterStorageClasses is every StorageClass in the cluster. Unlike pods,
+	// they are few enough in any real cluster that a single unpaged List is
+	// fine.
+	clusterStorageClasses []storagev1.StorageClass
+
+	// excludedNamespaceNames holds the names of the namespaces matching
+	// EXCLUDE_NAMESPACE_SELECTOR. It is empty when the variable is unset.
+	excludedNamespaceNames map[string]struct{}
+)
+
+// loadClusterState fetches the cluster-wide facts above.
+func loadClusterState(ctx context.Context) {
 	GinkgoHelper()
 
-	if cachedNodes == nil {
-		nodes, err := listNodes(ctx, metav1.ListOptions{})
-		Expect(err).NotTo(HaveOccurred(), "list nodes")
-		cachedNodes = &nodes
-	}
-	return *cachedNodes
+	var err error
+	clusterNodes, err = listNodes(ctx, metav1.ListOptions{})
+	Expect(err).NotTo(HaveOccurred(), "list nodes")
+
+	classes, err := coreClient.StorageV1().StorageClasses().List(ctx, metav1.ListOptions{})
+	Expect(err).NotTo(HaveOccurred(), "list StorageClasses")
+	clusterStorageClasses = classes.Items
+
+	excludedNamespaceNames = listExcludedNamespaces(ctx)
 }
 
-// nodesMatching filters allNodes(ctx) by selector, without an API call of its
-// own.
-func nodesMatching(ctx context.Context, selector labels.Selector) []corev1.Node {
-	GinkgoHelper()
-
+// nodesMatching filters clusterNodes by selector.
+func nodesMatching(selector labels.Selector) []corev1.Node {
 	var matched []corev1.Node
-	for _, node := range allNodes(ctx) {
+	for _, node := range clusterNodes {
 		if selector.Matches(labels.Set(node.Labels)) {
 			matched = append(matched, node)
 		}
@@ -128,80 +140,50 @@ func nodesMatching(ctx context.Context, selector labels.Selector) []corev1.Node 
 	return matched
 }
 
-// cachedExcludedNamespaces holds the names of every namespace matching
-// EXCLUDE_NAMESPACE_SELECTOR, fetched once per test process. A nil value means
-// the fetch hasn't happened yet. Namespaces are few enough that, like nodes,
-// they're cached whole rather than streamed.
-var cachedExcludedNamespaces *map[string]struct{}
-
-// excludedNamespaces returns the names of the namespaces whose labels match
-// EXCLUDE_NAMESPACE_SELECTOR, a standard label selector (for example
+// listExcludedNamespaces returns the names of the namespaces whose labels
+// match EXCLUDE_NAMESPACE_SELECTOR, a standard label selector (for example
 // `workload=student` or `env in (student,course)`). Checks use it to ignore
 // problems in namespaces they aren't responsible for, such as ones that hold
 // user workloads. The result is empty when the variable is unset, so by
-// default nothing is excluded. Like the other per-process caches in this file,
-// this is a snapshot from the first call.
+// default nothing is excluded.
 //
-// An unparseable selector fails the spec rather than being ignored, since
+// An unparseable selector fails setup rather than being ignored, since
 // silently excluding nothing would hide the typo. An empty selector must not
 // be handed to labels.Parse, which treats it as matching everything.
-func excludedNamespaces(ctx context.Context) map[string]struct{} {
+func listExcludedNamespaces(ctx context.Context) map[string]struct{} {
 	GinkgoHelper()
 
-	if cachedExcludedNamespaces == nil {
-		excluded := map[string]struct{}{}
-		if raw := getEnvWithDefault("EXCLUDE_NAMESPACE_SELECTOR", ""); raw != "" {
-			selector, err := labels.Parse(raw)
-			Expect(err).NotTo(HaveOccurred(), "parse EXCLUDE_NAMESPACE_SELECTOR=%q as a label selector", raw)
-
-			err = eachItem(ctx, coreClient.CoreV1().Namespaces().List, metav1.ListOptions{LabelSelector: selector.String()},
-				func(namespace *corev1.Namespace) error {
-					excluded[namespace.Name] = struct{}{}
-					return nil
-				})
-			Expect(err).NotTo(HaveOccurred(), "list namespaces matching EXCLUDE_NAMESPACE_SELECTOR")
-		}
-		cachedExcludedNamespaces = &excluded
+	excluded := map[string]struct{}{}
+	raw := getEnvWithDefault("EXCLUDE_NAMESPACE_SELECTOR", "")
+	if raw == "" {
+		return excluded
 	}
-	return *cachedExcludedNamespaces
+
+	selector, err := labels.Parse(raw)
+	Expect(err).NotTo(HaveOccurred(), "parse EXCLUDE_NAMESPACE_SELECTOR=%q as a label selector", raw)
+
+	err = eachItem(ctx, coreClient.CoreV1().Namespaces().List, metav1.ListOptions{LabelSelector: selector.String()},
+		func(namespace *corev1.Namespace) error {
+			excluded[namespace.Name] = struct{}{}
+			return nil
+		})
+	Expect(err).NotTo(HaveOccurred(), "list namespaces matching EXCLUDE_NAMESPACE_SELECTOR")
+	return excluded
 }
 
 // isExcludedNamespace reports whether namespace matches
 // EXCLUDE_NAMESPACE_SELECTOR, and so should be skipped by checks that span all
 // namespaces. Cluster-scoped objects have no namespace and are never excluded.
-func isExcludedNamespace(ctx context.Context, namespace string) bool {
-	GinkgoHelper()
-
-	_, excluded := excludedNamespaces(ctx)[namespace]
+func isExcludedNamespace(namespace string) bool {
+	_, excluded := excludedNamespaceNames[namespace]
 	return excluded
-}
-
-// cachedStorageClasses holds every StorageClass in the cluster, fetched once
-// per test process. A nil value means the fetch hasn't happened yet.
-// StorageClasses, unlike pods, are few enough in any real cluster that a
-// single unpaged List is fine.
-var cachedStorageClasses *[]storagev1.StorageClass
-
-// allStorageClasses returns every StorageClass in the cluster, fetching and
-// caching the full list on first use.
-func allStorageClasses(ctx context.Context) []storagev1.StorageClass {
-	GinkgoHelper()
-
-	if cachedStorageClasses == nil {
-		classes, err := coreClient.StorageV1().StorageClasses().List(ctx, metav1.ListOptions{})
-		Expect(err).NotTo(HaveOccurred(), "list StorageClasses")
-		cachedStorageClasses = &classes.Items
-	}
-	return *cachedStorageClasses
 }
 
 // defaultStorageClassName returns the name of the cluster's default
 // StorageClass, or "" if none is marked default. A PersistentVolumeClaim
 // with no StorageClassName of its own resolves to this one.
-func defaultStorageClassName(ctx context.Context) string {
-	GinkgoHelper()
-
-	for _, class := range allStorageClasses(ctx) {
+func defaultStorageClassName() string {
+	for _, class := range clusterStorageClasses {
 		if class.Annotations["storageclass.kubernetes.io/is-default-class"] == "true" {
 			return class.Name
 		}
@@ -216,10 +198,8 @@ func defaultStorageClassName(ctx context.Context) string {
 // VolumeBindingMode set, or no StorageClass by this name at all, reports
 // false: VolumeBindingImmediate is both the API's default when the field is
 // omitted and the correct answer when the class can't be found.
-func storageClassIsWaitForFirstConsumer(ctx context.Context, name string) bool {
-	GinkgoHelper()
-
-	for _, class := range allStorageClasses(ctx) {
+func storageClassIsWaitForFirstConsumer(name string) bool {
+	for _, class := range clusterStorageClasses {
 		if class.Name == name {
 			return class.VolumeBindingMode != nil &&
 				*class.VolumeBindingMode == storagev1.VolumeBindingWaitForFirstConsumer
@@ -535,13 +515,13 @@ func statefulSetIsAvailableByName(ctx context.Context, namespace, name string) {
 * DesiredNumberScheduled, NumberAvailable and expected all at 0; that's not
 * itself treated as a failure.
  */
-func daemonsetIsAvailable(ctx context.Context, daemonset *appsv1.DaemonSet) {
+func daemonsetIsAvailable(daemonset *appsv1.DaemonSet) {
 	GinkgoHelper()
 
 	id := objectID(daemonset)
 
 	selector := labels.Set(daemonset.Spec.Template.Spec.NodeSelector).AsSelector()
-	expected := len(nodesMatching(ctx, selector))
+	expected := len(nodesMatching(selector))
 
 	Expect(daemonset.Status.ObservedGeneration).To(
 		BeNumerically(">=", daemonset.Generation),
@@ -574,7 +554,7 @@ func daemonsetIsAvailableByName(ctx context.Context, namespace, name string) {
 	GinkgoHelper()
 	daemonset, err := coreClient.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
 	Expect(err).NotTo(HaveOccurred())
-	daemonsetIsAvailable(ctx, daemonset)
+	daemonsetIsAvailable(daemonset)
 }
 
 // getEnvWithDefault is a typed version of os.Getenv that allows you to

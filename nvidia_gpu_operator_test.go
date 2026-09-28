@@ -1,7 +1,6 @@
 package clustertests
 
 import (
-	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -34,10 +33,10 @@ var gpuNodeSelector = labels.SelectorFromSet(labels.Set{
 })
 
 // gpuNodes returns the nodes labeled as having a GPU, filtered locally from
-// the shared, once-per-process node cache (see allNodes/nodesMatching in
+// the nodes loaded at suite setup (see clusterNodes and nodesMatching in
 // helpers_test.go) rather than its own List call.
-func gpuNodes(ctx context.Context) []corev1.Node {
-	return nodesMatching(ctx, gpuNodeSelector)
+func gpuNodes() []corev1.Node {
+	return nodesMatching(gpuNodeSelector)
 }
 
 var _ = Describe("NvidiaGpuOperator", Label("gpu"), func() {
@@ -47,7 +46,7 @@ var _ = Describe("NvidiaGpuOperator", Label("gpu"), func() {
 
 	It("has a gpu.product label on every node with gpu.present=true", func(ctx SpecContext) {
 		var problems []string
-		for _, node := range gpuNodes(ctx) {
+		for _, node := range gpuNodes() {
 			if _, found := node.Labels["nvidia.com/gpu.product"]; !found {
 				problems = append(problems, node.Name)
 			}
@@ -118,6 +117,6 @@ var _ = Describe("NvidiaGpuOperator", Label("gpu"), func() {
 			List(ctx, metav1.ListOptions{LabelSelector: "app.kubernetes.io/component=nvidia-driver"})
 		Expect(err).NotTo(HaveOccurred(), "list GPU driver daemonset")
 		Expect(daemonsets.Items).To(HaveLen(1))
-		daemonsetIsAvailable(ctx, &daemonsets.Items[0])
+		daemonsetIsAvailable(&daemonsets.Items[0])
 	})
 })
