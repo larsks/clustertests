@@ -10,6 +10,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	certificatesv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -414,7 +416,151 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 		slices.Sort(problems)
 		Expect(problems).To(BeEmpty())
 	})
+
+	// This is the workload-level counterpart of the per-pod checks above, and
+	// covers every namespace rather than a fixed list of operator components.
+	// A workload scaled to zero is deliberately left alone. Like the CSR
+	// check, this is a point-in-time read, so a workload caught in the
+	// middle of a restart or rollout can cause a spurious failure; a
+	// Deployment that is still rolling out is only reported once it has
+	// exceeded its progress deadline.
+	It("requires every Deployment, StatefulSet, and DaemonSet to have its replicas available", Label("workloads"), func(ctx SpecContext) {
+		var problems []string
+
+		listDeployments := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+			return coreClient.AppsV1().Deployments(metav1.NamespaceAll).List(ctx, opts)
+		})
+		listDeployments.PageSize = listPageSize
+		err := listDeployments.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
+			if problem := deploymentProblem(obj.(*appsv1.Deployment)); problem != "" {
+				problems = append(problems, problem)
+			}
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "list Deployments across all namespaces")
+
+		listStatefulSets := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+			return coreClient.AppsV1().StatefulSets(metav1.NamespaceAll).List(ctx, opts)
+		})
+		listStatefulSets.PageSize = listPageSize
+		err = listStatefulSets.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
+			statefulSet := obj.(*appsv1.StatefulSet)
+			desired := int32(1)
+			if statefulSet.Spec.Replicas != nil {
+				desired = *statefulSet.Spec.Replicas
+			}
+			if statefulSet.DeletionTimestamp == nil && statefulSet.Status.ReadyReplicas < desired {
+				problems = append(problems, fmt.Sprintf(
+					"statefulset %s: %d of %d replicas ready",
+					objectID(statefulSet), statefulSet.Status.ReadyReplicas, desired,
+				))
+			}
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "list StatefulSets across all namespaces")
+
+		listDaemonSets := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+			return coreClient.AppsV1().DaemonSets(metav1.NamespaceAll).List(ctx, opts)
+		})
+		listDaemonSets.PageSize = listPageSize
+		err = listDaemonSets.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
+			daemonSet := obj.(*appsv1.DaemonSet)
+			if daemonSet.DeletionTimestamp == nil && daemonSet.Status.NumberAvailable < daemonSet.Status.DesiredNumberScheduled {
+				problems = append(problems, fmt.Sprintf(
+					"daemonset %s: %d of %d pods available",
+					objectID(daemonSet), daemonSet.Status.NumberAvailable, daemonSet.Status.DesiredNumberScheduled,
+				))
+			}
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "list DaemonSets across all namespaces")
+
+		slices.Sort(problems)
+		Expect(problems).To(BeEmpty())
+	})
+
+	// A Job that has exhausted its retries or its deadline stays around in
+	// the Failed state, and won't run again on its own. Failed Jobs also
+	// linger after the fact: a CronJob keeps its most recent failed Job even
+	// once later runs succeed. So a failed Job created by a CronJob is only
+	// reported if that CronJob hasn't succeeded since the Job failed.
+	It("requires no Job to have failed", Label("jobs"), func(ctx SpecContext) {
+		lastSuccess := map[string]time.Time{}
+		listCronJobs := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+			return coreClient.BatchV1().CronJobs(metav1.NamespaceAll).List(ctx, opts)
+		})
+		listCronJobs.PageSize = listPageSize
+		err := listCronJobs.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
+			cronJob := obj.(*batchv1.CronJob)
+			if cronJob.Status.LastSuccessfulTime != nil {
+				lastSuccess[objectID(cronJob)] = cronJob.Status.LastSuccessfulTime.Time
+			}
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "list CronJobs across all namespaces")
+
+		listJobs := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+			return coreClient.BatchV1().Jobs(metav1.NamespaceAll).List(ctx, opts)
+		})
+		listJobs.PageSize = listPageSize
+
+		var problems []string
+		err = listJobs.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
+			job := obj.(*batchv1.Job)
+			for _, condition := range job.Status.Conditions {
+				if condition.Type != batchv1.JobFailed || condition.Status != corev1.ConditionTrue {
+					continue
+				}
+
+				if owner := metav1.GetControllerOf(job); owner != nil && owner.Kind == "CronJob" {
+					if succeeded, found := lastSuccess[job.Namespace+"/"+owner.Name]; found &&
+						succeeded.After(condition.LastTransitionTime.Time) {
+						continue
+					}
+				}
+				problems = append(problems, fmt.Sprintf(
+					"%s: failed at %s (%s: %s)",
+					objectID(job), condition.LastTransitionTime.Format(time.RFC3339), condition.Reason, condition.Message,
+				))
+			}
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "list Jobs across all namespaces")
+
+		slices.Sort(problems)
+		Expect(problems).To(BeEmpty())
+	})
 })
+
+// deploymentProblem describes why a Deployment doesn't have its replicas
+// available, or returns "" if it does (or is scaled to zero, or being
+// deleted).
+func deploymentProblem(deployment *appsv1.Deployment) string {
+	desired := int32(1)
+	if deployment.Spec.Replicas != nil {
+		desired = *deployment.Spec.Replicas
+	}
+	if desired == 0 || deployment.DeletionTimestamp != nil {
+		return ""
+	}
+
+	id := "deployment " + objectID(deployment)
+	progressing := deploymentCondition(deployment, appsv1.DeploymentProgressing)
+	available := deploymentCondition(deployment, appsv1.DeploymentAvailable)
+	status := deployment.Status
+
+	switch {
+	case progressing != nil && progressing.Status == corev1.ConditionFalse && progressing.Reason == "ProgressDeadlineExceeded":
+		return fmt.Sprintf("%s: rollout is stuck: %s", id, progressing.Message)
+	case available != nil && available.Status != corev1.ConditionTrue:
+		return fmt.Sprintf("%s: Available=%s (%s: %s)", id, available.Status, available.Reason, available.Message)
+	case status.Replicas == desired && status.UpdatedReplicas == desired && status.AvailableReplicas < desired:
+		// The rollout is finished, so the missing replicas aren't just the
+		// ones a rolling update briefly takes down.
+		return fmt.Sprintf("%s: %d of %d replicas available", id, status.AvailableReplicas, desired)
+	}
+	return ""
+}
 
 func nodeConditionStatus(node corev1.Node, conditionType corev1.NodeConditionType) (corev1.ConditionStatus, bool) {
 	for _, condition := range node.Status.Conditions {
