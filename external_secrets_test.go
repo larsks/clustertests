@@ -33,14 +33,10 @@ var _ = Describe("ExternalSecretsOperator", Label("secrets"), func() {
 		skipIfResourceKindDoesNotExist(externalSecretGVR)
 	})
 
-	DescribeTable("has available deployment", func(ctx SpecContext, name string) {
-		deploymentIsAvailableByName(ctx, externalSecretsNamespace, name)
-	},
-		entriesFor(
-			"external-secrets",
-			"external-secrets-cert-controller",
-			"external-secrets-webhook",
-		),
+	describeAvailableDeployments(externalSecretsNamespace,
+		"external-secrets",
+		"external-secrets-cert-controller",
+		"external-secrets-webhook",
 	)
 
 	// external-secrets-operator-controller-manager only exists when

@@ -46,45 +46,37 @@ var _ = Describe("OpenShiftVirtualization", Label("cnv"), func() {
 		skipIfResourceKindDoesNotExist(virtualMachineGVR)
 	})
 
-	DescribeTable("has available deployment", func(ctx SpecContext, name string) {
-		deploymentIsAvailableByName(ctx, cnvNamespace, name)
-	},
-		entriesFor(
-			"aaq-operator",
-			"cdi-apiserver",
-			"cdi-deployment",
-			"cdi-operator",
-			"cdi-uploadproxy",
-			"cluster-network-addons-operator",
-			"hco-operator",
-			"hco-webhook",
-			"hostpath-provisioner-operator",
-			"hyperconverged-cluster-cli-download",
-			"kubemacpool-cert-manager",
-			"kubemacpool-mac-controller-manager",
-			"kubevirt-apiserver-proxy",
-			"kubevirt-console-plugin",
-			"kubevirt-ipam-controller-manager",
-			"kubevirt-migration-controller",
-			"kubevirt-migration-operator",
-			"ssp-operator",
-			"virt-api",
-			"virt-controller",
-			"virt-exportproxy",
-			"virt-operator",
-			"virt-platform-autopilot",
-			"virt-template-validator",
-		),
+	describeAvailableDeployments(cnvNamespace,
+		"aaq-operator",
+		"cdi-apiserver",
+		"cdi-deployment",
+		"cdi-operator",
+		"cdi-uploadproxy",
+		"cluster-network-addons-operator",
+		"hco-operator",
+		"hco-webhook",
+		"hostpath-provisioner-operator",
+		"hyperconverged-cluster-cli-download",
+		"kubemacpool-cert-manager",
+		"kubemacpool-mac-controller-manager",
+		"kubevirt-apiserver-proxy",
+		"kubevirt-console-plugin",
+		"kubevirt-ipam-controller-manager",
+		"kubevirt-migration-controller",
+		"kubevirt-migration-operator",
+		"ssp-operator",
+		"virt-api",
+		"virt-controller",
+		"virt-exportproxy",
+		"virt-operator",
+		"virt-platform-autopilot",
+		"virt-template-validator",
 	)
 
-	DescribeTable("has available daemonset", func(ctx SpecContext, name string) {
-		daemonsetIsAvailableByName(ctx, cnvNamespace, name)
-	},
-		entriesFor(
-			"bridge-marker",
-			"kube-cni-linux-bridge-plugin",
-			"virt-handler",
-		),
+	describeAvailableDaemonSets(cnvNamespace,
+		"bridge-marker",
+		"kube-cni-linux-bridge-plugin",
+		"virt-handler",
 	)
 
 	// The deployments above can all be running while the HyperConverged

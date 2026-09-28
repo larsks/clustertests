@@ -62,14 +62,10 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 		skipIfResourceKindDoesNotExist(certificateGVR)
 	})
 
-	DescribeTable("has available deployment", func(ctx SpecContext, name string) {
-		deploymentIsAvailableByName(ctx, certManagerNamespace, name)
-	},
-		entriesFor(
-			"cert-manager",
-			"cert-manager-cainjector",
-			"cert-manager-webhook",
-		),
+	describeAvailableDeployments(certManagerNamespace,
+		"cert-manager",
+		"cert-manager-cainjector",
+		"cert-manager-webhook",
 	)
 
 	// An Issuer that isn't Ready (bad credentials, an unreachable ACME

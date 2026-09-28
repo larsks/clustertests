@@ -76,12 +76,8 @@ var _ = Describe("RedHatOpenShiftAI", Label("rhods"), func() {
 		skipIfResourceKindDoesNotExist(dataScienceClusterGVR)
 	})
 
-	DescribeTable("has available deployment", func(ctx SpecContext, name string) {
-		deploymentIsAvailableByName(ctx, rhodsOperatorNamespace, name)
-	},
-		entriesFor(
-			"rhods-operator",
-		),
+	describeAvailableDeployments(rhodsOperatorNamespace,
+		"rhods-operator",
 	)
 
 	It("has a ready DataScienceCluster", func(ctx SpecContext) {

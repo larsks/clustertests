@@ -13,3 +13,19 @@ func entriesFor(names ...string) []TableEntry {
 	}
 	return entries
 }
+
+// describeAvailableDeployments registers a table that checks each named
+// deployment in namespace is available (see deploymentIsAvailable). Call it
+// inside the Describe container for the component that owns them.
+func describeAvailableDeployments(namespace string, names ...string) {
+	DescribeTable("has available deployment", func(ctx SpecContext, name string) {
+		deploymentIsAvailableByName(ctx, namespace, name)
+	}, entriesFor(names...))
+}
+
+// describeAvailableDaemonSets is describeAvailableDeployments for DaemonSets.
+func describeAvailableDaemonSets(namespace string, names ...string) {
+	DescribeTable("has available daemonset", func(ctx SpecContext, name string) {
+		daemonsetIsAvailableByName(ctx, namespace, name)
+	}, entriesFor(names...))
+}

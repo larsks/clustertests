@@ -65,24 +65,16 @@ var _ = Describe("Portworx", Label("portworx"), func() {
 		skipIfResourceKindDoesNotExist(storageClusterGVR)
 	})
 
-	DescribeTable("has available deployment", func(ctx SpecContext, name string) {
-		deploymentIsAvailableByName(ctx, portworxNamespace, name)
-	},
-		entriesFor(
-			"portworx-operator",
-			"pure-cosi-driver",
-			"px-pure-csi-controller",
-			"px-pure-csi-telemetry-registration",
-		),
+	describeAvailableDeployments(portworxNamespace,
+		"portworx-operator",
+		"pure-cosi-driver",
+		"px-pure-csi-controller",
+		"px-pure-csi-telemetry-registration",
 	)
 
-	DescribeTable("has available daemonset", func(ctx SpecContext, name string) {
-		daemonsetIsAvailableByName(ctx, portworxNamespace, name)
-	},
-		entriesFor(
-			"px-pure-csi-node",
-			"px-pure-csi-telemetry",
-		),
+	describeAvailableDaemonSets(portworxNamespace,
+		"px-pure-csi-node",
+		"px-pure-csi-telemetry",
 	)
 
 	It("has a healthy StorageCluster", func(ctx SpecContext) {
