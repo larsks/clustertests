@@ -2,9 +2,11 @@ package main
 
 import (
 	"embed"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -29,11 +31,15 @@ type Test struct {
 type Suite struct {
 	Name       string
 	Properties []JUnitProperty
-	Tests      []Test
-	Total      int
-	Passed     int
-	Skipped    int
-	Failed     int
+	// ServerURL is the value of the "ServerURL" property, if any testcase or
+	// the suite itself defines one. On the overview it is every distinct
+	// value across suites, comma separated.
+	ServerURL string
+	Tests     []Test
+	Total     int
+	Passed    int
+	Skipped   int
+	Failed    int
 }
 
 // Report is the top level view model passed to the template.
@@ -76,13 +82,53 @@ func failureText(tc JUnitTestCase) string {
 	return msg.Message
 }
 
+// serverURLProperty is the name of the property (suite level or testcase
+// level) that identifies the cluster a report was generated against.
+const serverURLProperty = "ServerURL"
+
+// propertyValue returns the value of the named property. Some producers, such
+// as Ginkgo's report entries, JSON-encode values, so a value that is a JSON
+// string is unquoted; anything else is returned as is.
+func propertyValue(props []JUnitProperty, name string) string {
+	for _, p := range props {
+		if p.Name != name {
+			continue
+		}
+		var s string
+		if err := json.Unmarshal([]byte(p.Value), &s); err == nil {
+			return s
+		}
+		return p.Value
+	}
+	return ""
+}
+
+// suiteServerURL returns the first ServerURL found on the suite's own
+// properties or, failing that, on any of its testcases.
+func suiteServerURL(s JUnitTestSuite) string {
+	if v := propertyValue(s.Properties, serverURLProperty); v != "" {
+		return v
+	}
+	for _, tc := range s.TestCases {
+		if v := propertyValue(tc.Properties, serverURLProperty); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 func buildReport(suites []JUnitTestSuite) Report {
 	var report Report
+	var serverURLs []string
 
 	for _, s := range suites {
 		suite := Suite{
 			Name:       s.Name,
 			Properties: s.Properties,
+			ServerURL:  suiteServerURL(s),
+		}
+		if suite.ServerURL != "" && !slices.Contains(serverURLs, suite.ServerURL) {
+			serverURLs = append(serverURLs, suite.ServerURL)
 		}
 
 		for _, tc := range s.TestCases {
@@ -120,6 +166,8 @@ func buildReport(suites []JUnitTestSuite) Report {
 		report.Overview.Skipped += suite.Skipped
 		report.Overview.Failed += suite.Failed
 	}
+
+	report.Overview.ServerURL = strings.Join(serverURLs, ", ")
 
 	return report
 }

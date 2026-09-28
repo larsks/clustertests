@@ -35,6 +35,8 @@ type JUnitTestCase struct {
 	Skipped   *JUnitMessage `xml:"skipped"`
 	SystemOut string        `xml:"system-out"`
 	SystemErr string        `xml:"system-err"`
+	// Properties holds per-testcase properties, such as Ginkgo report entries.
+	Properties []JUnitProperty `xml:"properties>property"`
 }
 
 type JUnitMessage struct {
