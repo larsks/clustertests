@@ -407,37 +407,6 @@ func envOrDefault(name, def string) string {
 	return def
 }
 
-// intFromEnv returns the value of the named environment variable parsed as an
-// integer, or def if it's unset or empty. Like durationFromEnv, a value that
-// doesn't parse fails the spec.
-func intFromEnv(name string, def int) int {
-	GinkgoHelper()
-
-	value := envOrDefault(name, "")
-	if value == "" {
-		return def
-	}
-	number, err := strconv.Atoi(value)
-	Expect(err).NotTo(HaveOccurred(), "parse %s=%q as an integer", name, value)
-	return number
-}
-
-// durationFromEnv returns the value of the named environment variable parsed
-// as a Go duration (for example "10m"), or def if it's unset or empty. A value
-// that doesn't parse fails the spec, rather than silently falling back to the
-// default and hiding a typo.
-func durationFromEnv(name string, def time.Duration) time.Duration {
-	GinkgoHelper()
-
-	value := envOrDefault(name, "")
-	if value == "" {
-		return def
-	}
-	duration, err := time.ParseDuration(value)
-	Expect(err).NotTo(HaveOccurred(), "parse %s=%q as a duration", name, value)
-	return duration
-}
-
 func statefulSetIsAvailable(statefulSet *appsv1.StatefulSet) {
 	GinkgoHelper()
 
@@ -531,4 +500,75 @@ func daemonsetIsAvailableByName(ctx context.Context, namespace, name string) {
 	daemonset, err := coreClient.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
 	Expect(err).NotTo(HaveOccurred())
 	daemonsetIsAvailable(ctx, daemonset)
+}
+
+// getEnvWithDefault is a typed version of os.Getenv that allows you to
+// specify a default value. The return type of the method is the type
+// of the defaultValue argument. Currently supported types:
+//
+//   - string
+//   - int
+//   - bool
+//   - float64
+//   - time.Duration
+//   - time.Time (must provide format as third argument)
+//
+// The default is returned if the variable is unset or empty, or if T is not one
+// of the supported types. A value that doesn't parse fails the spec, rather
+// than silently falling back to the default and hiding a typo.
+func getEnvWithDefault[T any](name string, defaultValue T, options ...any) (value T) {
+	GinkgoHelper()
+
+	val := os.Getenv(name)
+	if val == "" {
+		return defaultValue
+	}
+
+	var result any
+	var zero T
+
+	switch any(zero).(type) {
+	case string:
+		result = val
+	case int:
+		v, err := strconv.Atoi(val)
+		Expect(err).NotTo(HaveOccurred(), "parse %s=%q as an integer", name, val)
+		result = v
+	case bool:
+		v, err := strconv.ParseBool(val)
+		Expect(err).NotTo(HaveOccurred(), "parse %s=%q as a boolean", name, val)
+		result = v
+	case float64:
+		v, err := strconv.ParseFloat(val, 64)
+		Expect(err).NotTo(HaveOccurred(), "parse %s=%q as a float", name, val)
+		result = v
+	case time.Duration:
+		v, err := time.ParseDuration(val)
+		Expect(err).NotTo(HaveOccurred(), "parse %s=%q as a duration", name, val)
+		result = v
+	case time.Time:
+		if len(options) == 0 {
+			return defaultValue
+		}
+		v, err := tryParseTime(val, options)
+		Expect(err).NotTo(HaveOccurred(), "parse %s=%q as a time", name, val)
+		result = v
+	default:
+		return defaultValue
+	}
+
+	return result.(T)
+}
+
+func tryParseTime(val string, formats []any) (time.Time, error) {
+	for _, format := range formats {
+		switch format := format.(type) {
+		case string:
+			if res, err := time.Parse(format, val); err == nil {
+				return res, nil
+			}
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("invalid time format")
 }

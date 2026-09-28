@@ -175,7 +175,7 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 	// already been removed, or by an unavailable APIService. The namespace
 	// reports what is blocking it in its status conditions.
 	It("requires no namespaces to be stuck terminating", Label("namespaces"), func(ctx SpecContext) {
-		timeout := durationFromEnv("TERMINATING_TIMEOUT", defaultTerminatingTimeout)
+		timeout := getEnvWithDefault("TERMINATING_TIMEOUT", defaultTerminatingTimeout)
 		now := time.Now()
 
 		listNamespaces := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {

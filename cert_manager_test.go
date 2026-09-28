@@ -173,7 +173,7 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 	It("has no failed or stuck ACME challenges", func(ctx SpecContext) {
 		skipIfResourceKindDoesNotExist(challengeGVR)
 
-		timeout := durationFromEnv("CHALLENGE_PENDING_TIMEOUT", 10*time.Minute)
+		timeout := getEnvWithDefault("CHALLENGE_PENDING_TIMEOUT", defaultChallengePendingTimeout)
 		now := time.Now()
 
 		settled, err := settledCertificates(ctx)

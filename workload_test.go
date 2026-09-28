@@ -75,7 +75,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 	// longer than the timeout is. Pods held back on purpose by a scheduling
 	// gate report a different reason and aren't flagged.
 	It("requires no pods to be stuck unschedulable", Label("pods"), func(ctx SpecContext) {
-		timeout := durationFromEnv("UNSCHEDULABLE_POD_TIMEOUT", defaultUnschedulablePodTimeout)
+		timeout := getEnvWithDefault("UNSCHEDULABLE_POD_TIMEOUT", defaultUnschedulablePodTimeout)
 		now := time.Now()
 
 		listPods := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
@@ -124,8 +124,8 @@ var _ = Describe("workload health", Label("cluster"), func() {
 	// flapping even if it's Running right now. Containers currently waiting
 	// for a reason the check above already reports aren't repeated here.
 	It("requires no containers to have been recently OOMKilled or restarted repeatedly", Label("pods"), func(ctx SpecContext) {
-		window := durationFromEnv("RECENT_TERMINATION_WINDOW", defaultRecentTerminationWindow)
-		restartThreshold := int32(intFromEnv("POD_RESTART_THRESHOLD", 5))
+		window := getEnvWithDefault("RECENT_TERMINATION_WINDOW", defaultRecentTerminationWindow)
+		restartThreshold := int32(getEnvWithDefault("POD_RESTART_THRESHOLD", defaultPodRestartThreshold))
 		now := time.Now()
 
 		listPods := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
@@ -178,7 +178,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 	// present well past that has usually lost its kubelet (a NotReady or
 	// vanished node) or is held by a finalizer nothing is removing.
 	It("requires no pods to be stuck terminating", Label("pods"), func(ctx SpecContext) {
-		timeout := durationFromEnv("TERMINATING_TIMEOUT", defaultTerminatingTimeout)
+		timeout := getEnvWithDefault("TERMINATING_TIMEOUT", defaultTerminatingTimeout)
 		now := time.Now()
 
 		listPods := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
