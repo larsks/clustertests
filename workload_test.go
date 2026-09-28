@@ -35,6 +35,9 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		var problems []string
 		err := listPods.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
 			pod := obj.(*corev1.Pod)
+			if isExcludedNamespace(ctx, pod.Namespace) {
+				return nil
+			}
 			id := pod.Namespace + "/" + pod.Name
 
 			if pod.Status.Phase == corev1.PodFailed {
@@ -86,7 +89,8 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		var problems []string
 		err := listPods.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
 			pod := obj.(*corev1.Pod)
-			if pod.Status.Phase != corev1.PodPending || pod.DeletionTimestamp != nil {
+			if pod.Status.Phase != corev1.PodPending || pod.DeletionTimestamp != nil ||
+				isExcludedNamespace(ctx, pod.Namespace) {
 				return nil
 			}
 
@@ -136,6 +140,9 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		var problems []string
 		err := listPods.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
 			pod := obj.(*corev1.Pod)
+			if isExcludedNamespace(ctx, pod.Namespace) {
+				return nil
+			}
 
 			containerStatuses := append(
 				append([]corev1.ContainerStatus{}, pod.Status.InitContainerStatuses...),
@@ -189,7 +196,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		var problems []string
 		err := listPods.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
 			pod := obj.(*corev1.Pod)
-			if pod.DeletionTimestamp == nil {
+			if pod.DeletionTimestamp == nil || isExcludedNamespace(ctx, pod.Namespace) {
 				return nil
 			}
 
@@ -226,7 +233,11 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		})
 		listDeployments.PageSize = listPageSize
 		err := listDeployments.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
-			if problem := deploymentProblem(obj.(*appsv1.Deployment)); problem != "" {
+			deployment := obj.(*appsv1.Deployment)
+			if isExcludedNamespace(ctx, deployment.Namespace) {
+				return nil
+			}
+			if problem := deploymentProblem(deployment); problem != "" {
 				problems = append(problems, problem)
 			}
 			return nil
@@ -239,6 +250,9 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		listStatefulSets.PageSize = listPageSize
 		err = listStatefulSets.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
 			statefulSet := obj.(*appsv1.StatefulSet)
+			if isExcludedNamespace(ctx, statefulSet.Namespace) {
+				return nil
+			}
 			desired := int32(1)
 			if statefulSet.Spec.Replicas != nil {
 				desired = *statefulSet.Spec.Replicas
@@ -259,6 +273,9 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		listDaemonSets.PageSize = listPageSize
 		err = listDaemonSets.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
 			daemonSet := obj.(*appsv1.DaemonSet)
+			if isExcludedNamespace(ctx, daemonSet.Namespace) {
+				return nil
+			}
 			if daemonSet.DeletionTimestamp == nil && daemonSet.Status.NumberAvailable < daemonSet.Status.DesiredNumberScheduled {
 				problems = append(problems, fmt.Sprintf(
 					"daemonset %s: %d of %d pods available",
@@ -301,6 +318,9 @@ var _ = Describe("workload health", Label("cluster"), func() {
 		var problems []string
 		err = listJobs.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
 			job := obj.(*batchv1.Job)
+			if isExcludedNamespace(ctx, job.Namespace) {
+				return nil
+			}
 			for _, condition := range job.Status.Conditions {
 				if condition.Type != batchv1.JobFailed || condition.Status != corev1.ConditionTrue {
 					continue

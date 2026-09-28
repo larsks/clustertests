@@ -89,7 +89,8 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 		var problems []string
 		err := listClaims.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
 			claim := obj.(*corev1.PersistentVolumeClaim)
-			if claim.Status.Phase == corev1.ClaimBound || pvcAwaitingFirstConsumer(ctx, claim) {
+			if claim.Status.Phase == corev1.ClaimBound || isExcludedNamespace(ctx, claim.Namespace) ||
+				pvcAwaitingFirstConsumer(ctx, claim) {
 				return nil
 			}
 

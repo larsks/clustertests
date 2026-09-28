@@ -109,6 +109,57 @@ func nodesMatching(ctx context.Context, selector labels.Selector) []corev1.Node 
 	return matched
 }
 
+// cachedExcludedNamespaces holds the names of every namespace matching
+// EXCLUDE_NAMESPACE_SELECTOR, fetched once per test process. A nil value means
+// the fetch hasn't happened yet. Namespaces are few enough that, like nodes,
+// they're cached whole rather than streamed.
+var cachedExcludedNamespaces *map[string]struct{}
+
+// excludedNamespaces returns the names of the namespaces whose labels match
+// EXCLUDE_NAMESPACE_SELECTOR, a standard label selector (for example
+// `workload=student` or `env in (student,course)`). Checks use it to ignore
+// problems in namespaces they aren't responsible for, such as ones that hold
+// user workloads. The result is empty when the variable is unset, so by
+// default nothing is excluded. Like the other per-process caches in this file,
+// this is a snapshot from the first call.
+//
+// An unparseable selector fails the spec rather than being ignored, since
+// silently excluding nothing would hide the typo. An empty selector must not
+// be handed to labels.Parse, which treats it as matching everything.
+func excludedNamespaces(ctx context.Context) map[string]struct{} {
+	GinkgoHelper()
+
+	if cachedExcludedNamespaces == nil {
+		excluded := map[string]struct{}{}
+		if raw := getEnvWithDefault("EXCLUDE_NAMESPACE_SELECTOR", ""); raw != "" {
+			selector, err := labels.Parse(raw)
+			Expect(err).NotTo(HaveOccurred(), "parse EXCLUDE_NAMESPACE_SELECTOR=%q as a label selector", raw)
+
+			listPages := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+				return coreClient.CoreV1().Namespaces().List(ctx, opts)
+			})
+			listPages.PageSize = listPageSize
+			err = listPages.EachListItem(ctx, metav1.ListOptions{LabelSelector: selector.String()}, func(obj runtime.Object) error {
+				excluded[obj.(*corev1.Namespace).Name] = struct{}{}
+				return nil
+			})
+			Expect(err).NotTo(HaveOccurred(), "list namespaces matching EXCLUDE_NAMESPACE_SELECTOR")
+		}
+		cachedExcludedNamespaces = &excluded
+	}
+	return *cachedExcludedNamespaces
+}
+
+// isExcludedNamespace reports whether namespace matches
+// EXCLUDE_NAMESPACE_SELECTOR, and so should be skipped by checks that span all
+// namespaces. Cluster-scoped objects have no namespace and are never excluded.
+func isExcludedNamespace(ctx context.Context, namespace string) bool {
+	GinkgoHelper()
+
+	_, excluded := excludedNamespaces(ctx)[namespace]
+	return excluded
+}
+
 // cachedStorageClasses holds every StorageClass in the cluster, fetched once
 // per test process. A nil value means the fetch hasn't happened yet.
 // StorageClasses, unlike pods, are few enough in any real cluster that a
