@@ -61,7 +61,7 @@ func resolveArgocdNaming(ctx context.Context) argocdNaming {
 		}
 		cachedArgocdNaming = &argocdNaming{
 			namespace: name,
-			prefix:    envOrDefault("ARGOCD_NAME_PREFIX", name),
+			prefix:    getEnvWithDefault("ARGOCD_NAME_PREFIX", name),
 		}
 	}
 	return *cachedArgocdNaming

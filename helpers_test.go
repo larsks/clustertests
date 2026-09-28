@@ -465,15 +465,6 @@ func deploymentIsAvailableIfPresent(ctx context.Context, namespace, name string)
 	deploymentIsAvailable(deployment)
 }
 
-// envOrDefault returns the value of the named environment variable, or def
-// if it's unset or empty.
-func envOrDefault(name, def string) string {
-	if value := os.Getenv(name); value != "" {
-		return value
-	}
-	return def
-}
-
 func statefulSetIsAvailable(statefulSet *appsv1.StatefulSet) {
 	GinkgoHelper()
 
