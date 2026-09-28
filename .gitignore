@@ -1,2 +1,1 @@
-/report.*
-kubeconfig*
+/cluster_tests.test
