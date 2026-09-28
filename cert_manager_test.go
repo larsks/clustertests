@@ -35,6 +35,11 @@ var (
 		Version:  "v1",
 		Resource: "certificaterequests",
 	}
+	orderGVR = schema.GroupVersionResource{
+		Group:    "acme.cert-manager.io",
+		Version:  "v1",
+		Resource: "orders",
+	}
 	issuerGVR = schema.GroupVersionResource{
 		Group:    "cert-manager.io",
 		Version:  "v1",
@@ -116,6 +121,42 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 		Expect(problems).To(BeEmpty())
 	})
 
+	// An ACME Order tracks one attempt to get a certificate from an ACME
+	// server such as Let's Encrypt. Orders that end in one of these states
+	// won't recover on their own, and status.reason carries the ACME
+	// server's explanation. As with CertificateRequests, failed Orders
+	// remain as history, so ones belonging to a settled Certificate are
+	// ignored.
+	It("has no failed ACME orders", func(ctx SpecContext) {
+		skipIfResourceKindDoesNotExist(orderGVR)
+
+		settled, err := settledCertificates(ctx)
+		Expect(err).NotTo(HaveOccurred(), "list certificates")
+		staleRequests, err := staleCertificateRequests(ctx, settled)
+		Expect(err).NotTo(HaveOccurred(), "list certificate requests")
+
+		var problems []string
+		err = eachResource(ctx, orderGVR, metav1.ListOptions{}, func(order *unstructured.Unstructured) error {
+			state, _, err := unstructured.NestedString(order.Object, "status", "state")
+			if err != nil {
+				problems = append(problems, fmt.Sprintf("%s: %v", objectID(order), err))
+				return nil
+			}
+			if !slices.Contains([]string{"invalid", "expired", "errored"}, state) ||
+				ownedByStaleRequest(order, staleRequests) {
+				return nil
+			}
+
+			reason, _, _ := unstructured.NestedString(order.Object, "status", "reason")
+			problems = append(problems, fmt.Sprintf("%s: state=%s (%s)", objectID(order), state, reason))
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "list ACME orders")
+
+		slices.Sort(problems)
+		Expect(problems).To(BeEmpty())
+	})
+
 	// A Ready=True condition can lag reality, so check the certificate's
 	// own dates as well.
 	It("has no expired certificates or overdue renewals", func(ctx SpecContext) {
@@ -188,6 +229,32 @@ func settledCertificates(ctx context.Context) (map[string]bool, error) {
 func certificateRequestIsStale(request *unstructured.Unstructured, settled map[string]bool) bool {
 	name, found := request.GetAnnotations()[certificateNameAnnotation]
 	return found && settled[request.GetNamespace()+"/"+name]
+}
+
+// staleCertificateRequests returns the namespace/name of every
+// CertificateRequest that is stale (see certificateRequestIsStale) given the
+// set of settled Certificates.
+func staleCertificateRequests(ctx context.Context, settled map[string]bool) (map[string]bool, error) {
+	stale := map[string]bool{}
+	err := eachResource(ctx, certificateRequestGVR, metav1.ListOptions{}, func(request *unstructured.Unstructured) error {
+		if certificateRequestIsStale(request, settled) {
+			stale[objectID(request)] = true
+		}
+		return nil
+	})
+	return stale, err
+}
+
+// ownedByStaleRequest reports whether obj is owned by a CertificateRequest in
+// stale. cert-manager creates each ACME Order with an owner reference to the
+// CertificateRequest it serves.
+func ownedByStaleRequest(obj *unstructured.Unstructured, stale map[string]bool) bool {
+	for _, owner := range obj.GetOwnerReferences() {
+		if owner.Kind == "CertificateRequest" && stale[obj.GetNamespace()+"/"+owner.Name] {
+			return true
+		}
+	}
+	return false
 }
 
 // statusTime reads an RFC 3339 timestamp from the named field of an object's
