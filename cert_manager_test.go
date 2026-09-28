@@ -7,7 +7,6 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -90,7 +89,7 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 	// Certificate hasn't since settled (see settledCertificates).
 	It("has no failed certificate requests", func(ctx SpecContext) {
 		settled, err := settledCertificates(ctx)
-		Expect(err).NotTo(HaveOccurred(), "list certificates")
+		expectNoError(err, "list certificates")
 
 		var problems []string
 		err = eachResource(ctx, certificateRequestGVR, metav1.ListOptions{}, func(request *unstructured.Unstructured) error {
@@ -118,7 +117,7 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 			}
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list certificate requests")
+		expectNoError(err, "list certificate requests")
 
 		expectNoProblems(problems)
 	})
@@ -133,9 +132,9 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 		skipIfResourceKindDoesNotExist(orderGVR)
 
 		settled, err := settledCertificates(ctx)
-		Expect(err).NotTo(HaveOccurred(), "list certificates")
+		expectNoError(err, "list certificates")
 		staleRequests, err := staleCertificateRequests(ctx, settled)
-		Expect(err).NotTo(HaveOccurred(), "list certificate requests")
+		expectNoError(err, "list certificate requests")
 
 		var problems []string
 		err = eachResource(ctx, orderGVR, metav1.ListOptions{}, func(order *unstructured.Unstructured) error {
@@ -153,7 +152,7 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 			problems = append(problems, fmt.Sprintf("%s: state=%s (%s)", objectID(order), state, reason))
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list ACME orders")
+		expectNoError(err, "list ACME orders")
 
 		expectNoProblems(problems)
 	})
@@ -173,11 +172,11 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 		now := time.Now()
 
 		settled, err := settledCertificates(ctx)
-		Expect(err).NotTo(HaveOccurred(), "list certificates")
+		expectNoError(err, "list certificates")
 		staleRequests, err := staleCertificateRequests(ctx, settled)
-		Expect(err).NotTo(HaveOccurred(), "list certificate requests")
+		expectNoError(err, "list certificate requests")
 		staleOrderSet, err := staleOrders(ctx, staleRequests)
-		Expect(err).NotTo(HaveOccurred(), "list ACME orders")
+		expectNoError(err, "list ACME orders")
 
 		var problems []string
 		err = eachResource(ctx, challengeGVR, metav1.ListOptions{}, func(challenge *unstructured.Unstructured) error {
@@ -205,7 +204,7 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 			}
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list ACME challenges")
+		expectNoError(err, "list ACME challenges")
 
 		expectNoProblems(problems)
 	})
@@ -239,7 +238,7 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 			}
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list certificates")
+		expectNoError(err, "list certificates")
 
 		expectNoProblems(problems)
 	})

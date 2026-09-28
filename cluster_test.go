@@ -90,7 +90,7 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 			problems = append(problems, fmt.Sprintf("%s/%s: phase=%s", claim.Namespace, claim.Name, phase))
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list PersistentVolumeClaims across all namespaces")
+		expectNoError(err, "list PersistentVolumeClaims across all namespaces")
 
 		expectNoProblems(problems)
 	})
@@ -143,7 +143,7 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 			}
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list CertificateSigningRequests")
+		expectNoError(err, "list CertificateSigningRequests")
 
 		expectNoProblems(problems)
 	})
@@ -174,7 +174,7 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 			}
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list namespaces")
+		expectNoError(err, "list namespaces")
 
 		expectNoProblems(problems)
 	})

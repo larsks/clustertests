@@ -2,7 +2,6 @@ package clustertests
 
 import (
 	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -52,7 +51,7 @@ var _ = Describe("Portworx", Label("portworx"), func() {
 		if apierrors.IsForbidden(err) {
 			Skip("insufficient privileges to list PureStorageCluster; rerun with an admin privileges to include this check")
 		}
-		Expect(err).NotTo(HaveOccurred(), "list PureStorageClusters")
+		expectNoError(err, "list PureStorageClusters")
 
 		expectPhase(ctx, purestorageClusterGVR, metav1.ListOptions{}, atLeastOne, "Running")
 	})

@@ -90,7 +90,7 @@ var _ = Describe("NvidiaGpuOperator", Label("gpu"), func() {
 			problems = append(problems, problem)
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list ClusterPolicies")
+		expectNoError(err, "list ClusterPolicies")
 		atLeastOne.expect(clusterPolicyGVR.GroupResource().String(), count)
 
 		expectNoProblems(problems)
@@ -115,7 +115,7 @@ var _ = Describe("NvidiaGpuOperator", Label("gpu"), func() {
 	It("has available driver daemonset", func(ctx SpecContext) {
 		daemonsets, err := coreClient.AppsV1().DaemonSets(nvidiaGpuOperatorNamespace).
 			List(ctx, metav1.ListOptions{LabelSelector: "app.kubernetes.io/component=nvidia-driver"})
-		Expect(err).NotTo(HaveOccurred(), "list GPU driver daemonset")
+		expectNoError(err, "list GPU driver daemonset")
 
 		// Assert on the names, not the DaemonSets: when the count is wrong,
 		// Gomega prints every object it was given, manifest and all.

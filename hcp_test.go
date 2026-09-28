@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -74,7 +73,7 @@ var _ = Describe("HostedControlPlanes", Label("hcp"), func() {
 		problems, _, err := conditionProblems(ctx, nodePoolGVR,
 			conditionExpectation{Type: "Ready", Status: metav1.ConditionTrue},
 		)
-		Expect(err).NotTo(HaveOccurred(), "list %s", nodePoolGVR.Resource)
+		expectNoError(err, "list %s", nodePoolGVR.Resource)
 
 		err = eachResource(ctx, nodePoolGVR, metav1.ListOptions{}, func(pool *unstructured.Unstructured) error {
 			if problem := nodePoolReplicaProblem(pool); problem != "" {
@@ -82,7 +81,7 @@ var _ = Describe("HostedControlPlanes", Label("hcp"), func() {
 			}
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list %s", nodePoolGVR.Resource)
+		expectNoError(err, "list %s", nodePoolGVR.Resource)
 
 		expectNoProblems(problems)
 	})

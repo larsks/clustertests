@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -35,7 +34,7 @@ func managedComponents(dsc *unstructured.Unstructured) []string {
 	GinkgoHelper()
 
 	components, _, err := unstructured.NestedMap(dsc.Object, "spec", "components")
-	Expect(err).NotTo(HaveOccurred(), "read spec.components of DataScienceCluster %s", objectID(dsc))
+	expectNoError(err, "read spec.components of DataScienceCluster %s", objectID(dsc))
 
 	var managed []string
 	for name, component := range components {
@@ -58,10 +57,10 @@ func componentResource(component string) (schema.GroupVersionResource, bool) {
 	GinkgoHelper()
 
 	groupVersion, err := schema.ParseGroupVersion(rhodsComponentsGroupVersion)
-	Expect(err).NotTo(HaveOccurred())
+	expectNoError(err)
 
 	resources, err := coreClient.Discovery().ServerResourcesForGroupVersion(rhodsComponentsGroupVersion)
-	Expect(err).NotTo(HaveOccurred(), "discover %s", rhodsComponentsGroupVersion)
+	expectNoError(err, "discover %s", rhodsComponentsGroupVersion)
 
 	for _, resource := range resources.APIResources {
 		if !strings.Contains(resource.Name, "/") && strings.EqualFold(resource.Kind, component) {
@@ -95,7 +94,7 @@ var _ = Describe("RedHatOpenShiftAI", Label("rhods"), func() {
 			dscs = append(dscs, dsc)
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list DataScienceClusters")
+		expectNoError(err, "list DataScienceClusters")
 
 		var problems []string
 		for _, dsc := range dscs {
@@ -112,7 +111,7 @@ var _ = Describe("RedHatOpenShiftAI", Label("rhods"), func() {
 				componentProblems, count, err := conditionProblems(ctx, gvr,
 					conditionExpectation{Type: conditionReady, Status: metav1.ConditionTrue},
 				)
-				Expect(err).NotTo(HaveOccurred(), "list %s", gvr.Resource)
+				expectNoError(err, "list %s", gvr.Resource)
 				if count == 0 {
 					problems = append(problems, fmt.Sprintf(
 						"%s: component %s is managed but no %s exist", objectID(dsc), component, gvr.Resource,

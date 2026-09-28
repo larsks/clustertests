@@ -120,10 +120,10 @@ func loadClusterState(ctx context.Context) {
 
 	var err error
 	clusterNodes, err = listNodes(ctx, metav1.ListOptions{})
-	Expect(err).NotTo(HaveOccurred(), "list nodes")
+	expectNoError(err, "list nodes")
 
 	classes, err := coreClient.StorageV1().StorageClasses().List(ctx, metav1.ListOptions{})
-	Expect(err).NotTo(HaveOccurred(), "list StorageClasses")
+	expectNoError(err, "list StorageClasses")
 	clusterStorageClasses = classes.Items
 
 	excludedNamespaceNames = listExcludedNamespaces(ctx)
@@ -160,14 +160,14 @@ func listExcludedNamespaces(ctx context.Context) map[string]struct{} {
 	}
 
 	selector, err := labels.Parse(raw)
-	Expect(err).NotTo(HaveOccurred(), "parse EXCLUDE_NAMESPACE_SELECTOR=%q as a label selector", raw)
+	expectNoError(err, "parse EXCLUDE_NAMESPACE_SELECTOR=%q as a label selector", raw)
 
 	err = eachItem(ctx, coreClient.CoreV1().Namespaces().List, metav1.ListOptions{LabelSelector: selector.String()},
 		func(namespace *corev1.Namespace) error {
 			excluded[namespace.Name] = struct{}{}
 			return nil
 		})
-	Expect(err).NotTo(HaveOccurred(), "list namespaces matching EXCLUDE_NAMESPACE_SELECTOR")
+	expectNoError(err, "list namespaces matching EXCLUDE_NAMESPACE_SELECTOR")
 	return excluded
 }
 
@@ -249,7 +249,7 @@ func skipIfResourceKindDoesNotExist(gvr schema.GroupVersionResource) {
 	if !cached {
 		resources, err := coreClient.Discovery().ServerResourcesForGroupVersion(gvr.GroupVersion().String())
 		if err != nil && !apierrors.IsNotFound(err) {
-			Expect(err).NotTo(HaveOccurred(), "discover %s", gvr.GroupVersion())
+			expectNoError(err, "discover %s", gvr.GroupVersion())
 		}
 		exists = err == nil && slices.ContainsFunc(resources.APIResources, func(r metav1.APIResource) bool {
 			return r.Name == gvr.Resource
@@ -390,7 +390,7 @@ func expectConditions(
 	GinkgoHelper()
 
 	problems, count, err := conditionProblems(ctx, gvr, expected...)
-	Expect(err).NotTo(HaveOccurred(), "list %s", gvr.Resource)
+	expectNoError(err, "list %s", gvr.Resource)
 	expectNoProblems(problems)
 	p.expect(gvr.GroupResource().String(), count)
 }
@@ -429,7 +429,7 @@ func expectPhase(
 		}
 		return nil
 	})
-	Expect(err).NotTo(HaveOccurred(), "list %s", gvr.Resource)
+	expectNoError(err, "list %s", gvr.Resource)
 
 	expectNoProblems(problems)
 
@@ -510,7 +510,7 @@ func deploymentIsAvailable(deployment *appsv1.Deployment) {
 func deploymentIsAvailableByName(ctx context.Context, namespace, name string) {
 	GinkgoHelper()
 	deployment, err := coreClient.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
-	Expect(err).NotTo(HaveOccurred())
+	expectNoError(err)
 	deploymentIsAvailable(deployment)
 }
 
@@ -525,7 +525,7 @@ func deploymentIsAvailableIfPresent(ctx context.Context, namespace, name string)
 	if apierrors.IsNotFound(err) {
 		Skip(fmt.Sprintf("deployment %s/%s not found", namespace, name))
 	}
-	Expect(err).NotTo(HaveOccurred())
+	expectNoError(err)
 	deploymentIsAvailable(deployment)
 }
 
@@ -552,7 +552,7 @@ func statefulSetIsAvailable(statefulSet *appsv1.StatefulSet) {
 func statefulSetIsAvailableByName(ctx context.Context, namespace, name string) {
 	GinkgoHelper()
 	statefulSet, err := coreClient.AppsV1().StatefulSets(namespace).Get(ctx, name, metav1.GetOptions{})
-	Expect(err).NotTo(HaveOccurred(), "get statefulset %q in namespace %q", name, namespace)
+	expectNoError(err, "get statefulset %q in namespace %q", name, namespace)
 	statefulSetIsAvailable(statefulSet)
 }
 
@@ -619,7 +619,7 @@ func daemonsetIsAvailable(daemonset *appsv1.DaemonSet) {
 func daemonsetIsAvailableByName(ctx context.Context, namespace, name string) {
 	GinkgoHelper()
 	daemonset, err := coreClient.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
-	Expect(err).NotTo(HaveOccurred())
+	expectNoError(err)
 	daemonsetIsAvailable(daemonset)
 }
 
@@ -653,26 +653,26 @@ func getEnvWithDefault[T any](name string, defaultValue T, options ...any) (valu
 		result = val
 	case int:
 		v, err := strconv.Atoi(val)
-		Expect(err).NotTo(HaveOccurred(), "parse %s=%q as an integer", name, val)
+		expectNoError(err, "parse %s=%q as an integer", name, val)
 		result = v
 	case bool:
 		v, err := strconv.ParseBool(val)
-		Expect(err).NotTo(HaveOccurred(), "parse %s=%q as a boolean", name, val)
+		expectNoError(err, "parse %s=%q as a boolean", name, val)
 		result = v
 	case float64:
 		v, err := strconv.ParseFloat(val, 64)
-		Expect(err).NotTo(HaveOccurred(), "parse %s=%q as a float", name, val)
+		expectNoError(err, "parse %s=%q as a float", name, val)
 		result = v
 	case time.Duration:
 		v, err := time.ParseDuration(val)
-		Expect(err).NotTo(HaveOccurred(), "parse %s=%q as a duration", name, val)
+		expectNoError(err, "parse %s=%q as a duration", name, val)
 		result = v
 	case time.Time:
 		if len(options) == 0 {
 			return defaultValue
 		}
 		v, err := tryParseTime(val, options)
-		Expect(err).NotTo(HaveOccurred(), "parse %s=%q as a time", name, val)
+		expectNoError(err, "parse %s=%q as a time", name, val)
 		result = v
 	default:
 		return defaultValue

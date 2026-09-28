@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -82,7 +81,7 @@ var _ = Describe("OLM", Label("olm"), func() {
 			}
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list Subscriptions across all namespaces")
+		expectNoError(err, "list Subscriptions across all namespaces")
 
 		expectNoProblems(problems)
 	})
@@ -104,7 +103,7 @@ var _ = Describe("OLM", Label("olm"), func() {
 			}
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list InstallPlans across all namespaces")
+		expectNoError(err, "list InstallPlans across all namespaces")
 
 		expectNoProblems(problems)
 	})
@@ -118,7 +117,7 @@ var _ = Describe("OLM", Label("olm"), func() {
 			counts[obj.GetNamespace()]++
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list OperatorGroups across all namespaces")
+		expectNoError(err, "list OperatorGroups across all namespaces")
 
 		var problems []string
 		for namespace, count := range counts {

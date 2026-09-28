@@ -39,7 +39,7 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	// the spec output, which Ginkgo includes in the JUnit report, so a report
 	// identifies the cluster it came from, without repeating it per process.
 	config, err := kubernetesConfig()
-	Expect(err).NotTo(HaveOccurred())
+	expectNoError(err)
 
 	//GinkgoWriter.Printf("[[KUBERNETES_SERVER_URL|%s]]\n", sanitizedServerURL(config.Host))
 	AddReportEntry("ServerURL", sanitizedServerURL(config.Host))
@@ -48,13 +48,13 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	// Runs on every parallel process: the clients are package-level variables,
 	// so each process needs its own.
 	config, err := kubernetesConfig()
-	Expect(err).NotTo(HaveOccurred())
+	expectNoError(err)
 
 	coreClient, err = kubernetes.NewForConfig(config)
-	Expect(err).NotTo(HaveOccurred(), "create Kubernetes client")
+	expectNoError(err, "create Kubernetes client")
 
 	dynamicClient, err = dynamic.NewForConfig(config)
-	Expect(err).NotTo(HaveOccurred(), "create dynamic Kubernetes client")
+	expectNoError(err, "create dynamic Kubernetes client")
 
 	// Ask the API server which identity it sees, equivalent to `oc whoami`.
 	// Do this before Ginkgo starts individual checks so bad or anonymous
@@ -64,7 +64,7 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 		&authenticationv1.SelfSubjectReview{},
 		metav1.CreateOptions{},
 	)
-	Expect(err).NotTo(HaveOccurred(), "Kubernetes authentication check failed; aborting suite before specs")
+	expectNoError(err, "Kubernetes authentication check failed; aborting suite before specs")
 
 	username := identity.Status.UserInfo.Username
 	Expect(username).NotTo(BeElementOf("", "system:anonymous"),

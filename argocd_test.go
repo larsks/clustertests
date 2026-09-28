@@ -5,7 +5,6 @@ import (
 	"os"
 
 	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -73,7 +72,7 @@ func detectArgocdNamespace(ctx context.Context) string {
 			return candidate
 		}
 		if !apierrors.IsNotFound(err) {
-			Expect(err).NotTo(HaveOccurred(), "get namespace %q", candidate)
+			expectNoError(err, "get namespace %q", candidate)
 		}
 	}
 	return "argocd"

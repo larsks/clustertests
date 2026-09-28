@@ -8,7 +8,6 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -58,7 +57,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 			}
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list pods across all namespaces")
+		expectNoError(err, "list pods across all namespaces")
 
 		expectNoProblems(problems)
 	})
@@ -99,7 +98,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 			}
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list pods across all namespaces")
+		expectNoError(err, "list pods across all namespaces")
 
 		expectNoProblems(problems)
 	})
@@ -152,7 +151,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 			}
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list pods across all namespaces")
+		expectNoError(err, "list pods across all namespaces")
 
 		expectNoProblems(problems)
 	})
@@ -183,7 +182,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 			}
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list pods across all namespaces")
+		expectNoError(err, "list pods across all namespaces")
 
 		expectNoProblems(problems)
 	})
@@ -207,7 +206,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 			}
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list Deployments across all namespaces")
+		expectNoError(err, "list Deployments across all namespaces")
 
 		err = eachItem(ctx, coreClient.AppsV1().StatefulSets(metav1.NamespaceAll).List, metav1.ListOptions{}, func(statefulSet *appsv1.StatefulSet) error {
 			if isExcludedNamespace(statefulSet.Namespace) {
@@ -222,7 +221,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 			}
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list StatefulSets across all namespaces")
+		expectNoError(err, "list StatefulSets across all namespaces")
 
 		err = eachItem(ctx, coreClient.AppsV1().DaemonSets(metav1.NamespaceAll).List, metav1.ListOptions{}, func(daemonSet *appsv1.DaemonSet) error {
 			if isExcludedNamespace(daemonSet.Namespace) {
@@ -236,7 +235,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 			}
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list DaemonSets across all namespaces")
+		expectNoError(err, "list DaemonSets across all namespaces")
 
 		expectNoProblems(problems)
 	})
@@ -254,7 +253,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 			}
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list CronJobs across all namespaces")
+		expectNoError(err, "list CronJobs across all namespaces")
 
 		var problems []string
 		err = eachItem(ctx, coreClient.BatchV1().Jobs(metav1.NamespaceAll).List, metav1.ListOptions{}, func(job *batchv1.Job) error {
@@ -279,7 +278,7 @@ var _ = Describe("workload health", Label("cluster"), func() {
 			}
 			return nil
 		})
-		Expect(err).NotTo(HaveOccurred(), "list Jobs across all namespaces")
+		expectNoError(err, "list Jobs across all namespaces")
 
 		expectNoProblems(problems)
 	})
