@@ -5,6 +5,8 @@ default:
 
 # Use --label-filter to select tests by label expression. All other arguments are
 # passed to the test suite (e.g., `just test --label-filter cnv --as system:admin`).
+#
+# Run tests (all tests by default, or selected tests with --label-filter).
 test *ARGV:
   #!/usr/bin/env bash
   set -euo pipefail
@@ -35,6 +37,7 @@ report:
 view-report: report
   xdg-open report.html
 
+# Convert report.xml to report.html
 convert-report:
   go run ./cmd/junit2html -o report.html report.xml
 
