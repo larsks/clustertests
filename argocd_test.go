@@ -28,12 +28,8 @@ type argocdNaming struct {
 	prefix    string
 }
 
-// cachedArgocdNaming holds the result of the first resolution. A nil value
-// means resolution hasn't happened yet.
-var cachedArgocdNaming *argocdNaming
-
-// resolveArgocdNaming resolves and caches the ArgoCD namespace and
-// component-name prefix, in order of preference:
+// resolveArgocdNaming resolves the ArgoCD namespace and component-name prefix,
+// in order of preference:
 //  1. ARGOCD_NAME, if set, gives the namespace (and, unless overridden below,
 //     the prefix too).
 //  2. Otherwise, whichever of the "argocd" or "openshift-gitops" namespaces
@@ -47,24 +43,23 @@ var cachedArgocdNaming *argocdNaming
 // ARGOCD_NAME_PREFIX, if set, always overrides the prefix independently of
 // how the namespace was resolved.
 //
-// This has to be resolved lazily, on first use inside a running spec, rather
-// than as a package-level var: DescribeTable's Entry arguments are evaluated
-// once, when the test tree is built, which happens before BeforeSuite runs
-// and before there's a working client to detect namespaces with.
+// This has to be resolved inside a running spec (the ArgoCD container's
+// BeforeEach), rather than as a package-level var: DescribeTable's Entry
+// arguments are evaluated once, when the test tree is built, which happens
+// before BeforeSuite runs and before there's a working client to detect
+// namespaces with. Each spec resolves it afresh; that costs at most two
+// cheap Get calls per spec, and keeps the specs independent of each other.
 func resolveArgocdNaming(ctx context.Context) argocdNaming {
 	GinkgoHelper()
 
-	if cachedArgocdNaming == nil {
-		name := os.Getenv("ARGOCD_NAME")
-		if name == "" {
-			name = detectArgocdNamespace(ctx)
-		}
-		cachedArgocdNaming = &argocdNaming{
-			namespace: name,
-			prefix:    getEnvWithDefault("ARGOCD_NAME_PREFIX", name),
-		}
+	name := os.Getenv("ARGOCD_NAME")
+	if name == "" {
+		name = detectArgocdNamespace(ctx)
 	}
-	return *cachedArgocdNaming
+	return argocdNaming{
+		namespace: name,
+		prefix:    getEnvWithDefault("ARGOCD_NAME_PREFIX", name),
+	}
 }
 
 // detectArgocdNamespace returns whichever of "argocd" or "openshift-gitops"
@@ -85,12 +80,18 @@ func detectArgocdNamespace(ctx context.Context) string {
 }
 
 var _ = Describe("ArgoCD", Label("argocd"), func() {
+	// naming is set afresh by each spec's BeforeEach. Specs in a process run
+	// one at a time, so sharing the variable between them is safe.
+	var naming argocdNaming
+
+	// The skip comes first, so no namespaces are looked up on a cluster
+	// without ArgoCD.
 	BeforeEach(func(ctx SpecContext) {
 		skipIfResourceKindDoesNotExist(applicationGVR)
+		naming = resolveArgocdNaming(ctx)
 	})
 
 	DescribeTable("has available deployment", func(ctx SpecContext, suffix string) {
-		naming := resolveArgocdNaming(ctx)
 		deploymentIsAvailableByName(ctx, naming.namespace, naming.prefix+"-"+suffix)
 	},
 		entriesFor(
@@ -106,7 +107,6 @@ var _ = Describe("ArgoCD", Label("argocd"), func() {
 	// operator bundle, with no equivalent on a plain Helm/upstream install,
 	// and aren't prefixed forms of anything, hence the literal names here.
 	DescribeTable("has available deployment, if present", func(ctx SpecContext, name string) {
-		naming := resolveArgocdNaming(ctx)
 		deploymentIsAvailableIfPresent(ctx, naming.namespace, name)
 	},
 		entriesFor(
@@ -119,7 +119,6 @@ var _ = Describe("ArgoCD", Label("argocd"), func() {
 	// not confirmed either way as an OpenShift GitOps default, and unlike
 	// "cluster"/"gitops-plugin" above it is a prefixed component name.
 	DescribeTable("has available deployment, if present", func(ctx SpecContext, suffix string) {
-		naming := resolveArgocdNaming(ctx)
 		deploymentIsAvailableIfPresent(ctx, naming.namespace, naming.prefix+"-"+suffix)
 	},
 		entriesFor(
@@ -128,7 +127,6 @@ var _ = Describe("ArgoCD", Label("argocd"), func() {
 	)
 
 	DescribeTable("has available statefulset", func(ctx SpecContext, suffix string) {
-		naming := resolveArgocdNaming(ctx)
 		statefulSetIsAvailableByName(ctx, naming.namespace, naming.prefix+"-"+suffix)
 	},
 		entriesFor(
