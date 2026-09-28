@@ -6,8 +6,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gcustom"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // ExpectNoProblems fails the spec unless problems is empty. This is how every
@@ -31,17 +29,4 @@ func haveNoProblems() gcustom.CustomGomegaMatcher {
 		"{{if .Failure}}Found {{len .Actual}} problem(s):\n{{range .Actual}}  - {{.}}\n{{end}}" +
 			"{{else}}Expected problems, but found none{{end}}",
 	)
-}
-
-// ObjectID returns namespace/name for namespaced resources and just the name
-// for cluster-scoped ones, so that same-named resources in different
-// namespaces can be told apart in failure messages. Any *appsv1.Deployment,
-// *appsv1.StatefulSet, *appsv1.DaemonSet, or *unstructured.Unstructured
-// satisfies metav1.Object, whether through an embedded ObjectMeta or its own
-// accessor methods.
-func ObjectID(obj metav1.Object) string {
-	if namespace := obj.GetNamespace(); namespace != "" {
-		return namespace + "/" + obj.GetName()
-	}
-	return obj.GetName()
 }
