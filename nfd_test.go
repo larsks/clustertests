@@ -27,15 +27,19 @@ var _ = Describe("NodeFeatureDiscovery", Label("nfd"), func() {
 	DescribeTable("has available deployment", func(ctx SpecContext, name string) {
 		deploymentIsAvailableByName(ctx, nfdNamespace, name)
 	},
-		Entry("nfd-controller-manager", "nfd-controller-manager"),
-		Entry("nfd-gc", "nfd-gc"),
-		Entry("nfd-master", "nfd-master"),
+		entriesFor(
+			"nfd-controller-manager",
+			"nfd-gc",
+			"nfd-master",
+		),
 	)
 
 	DescribeTable("has available daemonset", func(ctx SpecContext, name string) {
 		daemonsetIsAvailableByName(ctx, nfdNamespace, name)
 	},
-		Entry("nfd-worker", "nfd-worker"),
+		entriesFor(
+			"nfd-worker",
+		),
 	)
 
 	It("has available NodeFeatureDiscovery instances", func(ctx SpecContext) {

@@ -79,7 +79,9 @@ var _ = Describe("RedHatOpenShiftAI", Label("rhods"), func() {
 	DescribeTable("has available deployment", func(ctx SpecContext, name string) {
 		deploymentIsAvailableByName(ctx, rhodsOperatorNamespace, name)
 	},
-		Entry("rhods-operator", "rhods-operator"),
+		entriesFor(
+			"rhods-operator",
+		),
 	)
 
 	It("has a ready DataScienceCluster", func(ctx SpecContext) {

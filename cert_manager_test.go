@@ -65,9 +65,11 @@ var _ = Describe("CertManager", Label("cert-manager"), func() {
 	DescribeTable("has available deployment", func(ctx SpecContext, name string) {
 		deploymentIsAvailableByName(ctx, certManagerNamespace, name)
 	},
-		Entry("cert-manager", "cert-manager"),
-		Entry("cert-manager-cainjector", "cert-manager-cainjector"),
-		Entry("cert-manager-webhook", "cert-manager-webhook"),
+		entriesFor(
+			"cert-manager",
+			"cert-manager-cainjector",
+			"cert-manager-webhook",
+		),
 	)
 
 	// An Issuer that isn't Ready (bad credentials, an unreachable ACME

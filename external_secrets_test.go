@@ -36,9 +36,11 @@ var _ = Describe("ExternalSecretsOperator", Label("secrets"), func() {
 	DescribeTable("has available deployment", func(ctx SpecContext, name string) {
 		deploymentIsAvailableByName(ctx, externalSecretsNamespace, name)
 	},
-		Entry("external-secrets", "external-secrets"),
-		Entry("external-secrets-cert-controller", "external-secrets-cert-controller"),
-		Entry("external-secrets-webhook", "external-secrets-webhook"),
+		entriesFor(
+			"external-secrets",
+			"external-secrets-cert-controller",
+			"external-secrets-webhook",
+		),
 	)
 
 	// external-secrets-operator-controller-manager only exists when

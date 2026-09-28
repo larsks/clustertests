@@ -93,11 +93,13 @@ var _ = Describe("ArgoCD", Label("argocd"), func() {
 		naming := resolveArgocdNaming(ctx)
 		deploymentIsAvailableByName(ctx, naming.namespace, naming.prefix+"-"+suffix)
 	},
-		Entry("applicationset-controller", "applicationset-controller"),
-		Entry("dex-server", "dex-server"),
-		Entry("redis", "redis"),
-		Entry("repo-server", "repo-server"),
-		Entry("server", "server"),
+		entriesFor(
+			"applicationset-controller",
+			"dex-server",
+			"redis",
+			"repo-server",
+			"server",
+		),
 	)
 
 	// "cluster" and "gitops-plugin" are only added by OpenShift's GitOps
@@ -107,8 +109,10 @@ var _ = Describe("ArgoCD", Label("argocd"), func() {
 		naming := resolveArgocdNaming(ctx)
 		deploymentIsAvailableIfPresent(ctx, naming.namespace, name)
 	},
-		Entry("cluster", "cluster"),
-		Entry("gitops-plugin", "gitops-plugin"),
+		entriesFor(
+			"cluster",
+			"gitops-plugin",
+		),
 	)
 
 	// notifications-controller is present by default on a plain install but
@@ -123,6 +127,8 @@ var _ = Describe("ArgoCD", Label("argocd"), func() {
 		naming := resolveArgocdNaming(ctx)
 		statefulSetIsAvailableByName(ctx, naming.namespace, naming.prefix+"-"+suffix)
 	},
-		Entry("application-controller", "application-controller"),
+		entriesFor(
+			"application-controller",
+		),
 	)
 })

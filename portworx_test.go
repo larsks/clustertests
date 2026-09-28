@@ -68,17 +68,21 @@ var _ = Describe("Portworx", Label("portworx"), func() {
 	DescribeTable("has available deployment", func(ctx SpecContext, name string) {
 		deploymentIsAvailableByName(ctx, portworxNamespace, name)
 	},
-		Entry("portworx-operator", "portworx-operator"),
-		Entry("pure-cosi-driver", "pure-cosi-driver"),
-		Entry("px-pure-csi-controller", "px-pure-csi-controller"),
-		Entry("px-pure-csi-telemetry-registration", "px-pure-csi-telemetry-registration"),
+		entriesFor(
+			"portworx-operator",
+			"pure-cosi-driver",
+			"px-pure-csi-controller",
+			"px-pure-csi-telemetry-registration",
+		),
 	)
 
 	DescribeTable("has available daemonset", func(ctx SpecContext, name string) {
 		daemonsetIsAvailableByName(ctx, portworxNamespace, name)
 	},
-		Entry("px-pure-csi-node", "px-pure-csi-node"),
-		Entry("px-pure-csi-telemetry", "px-pure-csi-telemetry"),
+		entriesFor(
+			"px-pure-csi-node",
+			"px-pure-csi-telemetry",
+		),
 	)
 
 	It("has a healthy StorageCluster", func(ctx SpecContext) {

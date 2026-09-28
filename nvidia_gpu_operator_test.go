@@ -100,21 +100,25 @@ var _ = Describe("NvidiaGpuOperator", Label("gpu"), func() {
 	DescribeTable("has available deployment", func(ctx SpecContext, name string) {
 		deploymentIsAvailableByName(ctx, nvidiaGpuOperatorNamespace, name)
 	},
-		Entry("gpu-operator", "gpu-operator"),
+		entriesFor(
+			"gpu-operator",
+		),
 	)
 
 	DescribeTable("has available daemonset", func(ctx SpecContext, name string) {
 		daemonsetIsAvailableByName(ctx, nvidiaGpuOperatorNamespace, name)
 	},
-		Entry("gpu-feature-discovery", "gpu-feature-discovery"),
-		Entry("nvidia-container-toolkit-daemonset", "nvidia-container-toolkit-daemonset"),
-		Entry("nvidia-dcgm", "nvidia-dcgm"),
-		Entry("nvidia-dcgm-exporter", "nvidia-dcgm-exporter"),
-		Entry("nvidia-device-plugin-daemonset", "nvidia-device-plugin-daemonset"),
-		Entry("nvidia-device-plugin-mps-control-daemon", "nvidia-device-plugin-mps-control-daemon"),
-		Entry("nvidia-mig-manager", "nvidia-mig-manager"),
-		Entry("nvidia-node-status-exporter", "nvidia-node-status-exporter"),
-		Entry("nvidia-operator-validator", "nvidia-operator-validator"),
+		entriesFor(
+			"gpu-feature-discovery",
+			"nvidia-container-toolkit-daemonset",
+			"nvidia-dcgm",
+			"nvidia-dcgm-exporter",
+			"nvidia-device-plugin-daemonset",
+			"nvidia-device-plugin-mps-control-daemon",
+			"nvidia-mig-manager",
+			"nvidia-node-status-exporter",
+			"nvidia-operator-validator",
+		),
 	)
 
 	It("has available driver daemonset", func(ctx SpecContext) {
