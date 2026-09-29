@@ -31,6 +31,11 @@ var (
 		Version:  "v1",
 		Resource: "machineconfigpools",
 	}
+	apiServiceGVR = schema.GroupVersionResource{
+		Group:    "apiregistration.k8s.io",
+		Version:  "v1",
+		Resource: "apiservices",
+	}
 )
 
 var _ = Describe("cluster health", Label("cluster"), func() {
@@ -120,6 +125,18 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 		testutil.ExpectConditions(ctx, machineConfigPoolGVR, testutil.AtLeastOne,
 			testutil.ConditionExpectation{Type: "Updated", Status: metav1.ConditionTrue},
 			testutil.ConditionExpectation{Type: "Degraded", Status: metav1.ConditionFalse},
+		)
+	})
+
+	// An unavailable APIService means requests for its group/version fail or
+	// time out even though the rest of the cluster looks healthy, since it's
+	// typically not covered by the ClusterOperator or MachineConfigPool
+	// checks above.
+	It("requires every APIService to be Available", Label("apiservices"), func(ctx SpecContext) {
+		testutil.SkipIfResourceKindDoesNotExist(apiServiceGVR)
+
+		testutil.ExpectConditions(ctx, apiServiceGVR, testutil.AtLeastOne,
+			testutil.ConditionExpectation{Type: "Available", Status: metav1.ConditionTrue},
 		)
 	})
 
