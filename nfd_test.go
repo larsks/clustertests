@@ -20,7 +20,7 @@ var nodeFeatureDiscoveryGVR = schema.GroupVersionResource{
 	Resource: "nodefeaturediscoveries",
 }
 
-var _ = Describe("NodeFeatureDiscovery", Label("nfd"), func() {
+var _ = Describe("Node Feature Discovery Operator", Label("nfd"), func() {
 	BeforeEach(func(ctx SpecContext) {
 		testutil.SkipIfResourceKindDoesNotExist(nodeFeatureDiscoveryGVR)
 	})

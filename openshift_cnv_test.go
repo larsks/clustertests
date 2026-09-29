@@ -41,7 +41,7 @@ var kubeVirtGVR = schema.GroupVersionResource{
 	Resource: "kubevirts",
 }
 
-var _ = Describe("OpenShiftVirtualization", Label("cnv"), func() {
+var _ = Describe("OpenShift Virtualization", Label("cnv"), func() {
 	BeforeEach(func(ctx SpecContext) {
 		testutil.SkipIfResourceKindDoesNotExist(virtualMachineGVR)
 	})

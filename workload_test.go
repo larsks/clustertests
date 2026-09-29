@@ -20,7 +20,7 @@ import (
 // recover on its own.
 var badWaitingReasons = []string{"CrashLoopBackOff", "ImagePullBackOff", "ErrImagePull"}
 
-var _ = Describe("workload health", Label("cluster"), func() {
+var _ = Describe("Workload health", Label("cluster"), func() {
 	// A pod in Failed phase, crash-looping, or unable to pull its image won't
 	// recover on its own. Pending and Running pods are otherwise left alone,
 	// since a container can restart occasionally without being unhealthy.

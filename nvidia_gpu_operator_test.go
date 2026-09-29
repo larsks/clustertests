@@ -40,7 +40,7 @@ func gpuNodes() []corev1.Node {
 	return testutil.NodesMatching(gpuNodeSelector)
 }
 
-var _ = Describe("NvidiaGpuOperator", Label("gpu"), func() {
+var _ = Describe("Nvidia GPU operator", Label("gpu"), func() {
 	BeforeEach(func(ctx SpecContext) {
 		testutil.SkipIfResourceKindDoesNotExist(clusterPolicyGVR)
 	})

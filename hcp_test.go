@@ -33,7 +33,7 @@ var (
 // operator, and cover the hosted clusters it manages. None of them requires a
 // hosted cluster to exist: a management cluster that hasn't created any yet
 // is healthy.
-var _ = Describe("HostedControlPlanes", Label("hcp"), func() {
+var _ = Describe("Hosted Control Planes", Label("hcp"), func() {
 	BeforeEach(func(ctx SpecContext) {
 		testutil.SkipIfResourceKindDoesNotExist(hostedClusterGVR)
 	})

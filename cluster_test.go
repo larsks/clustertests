@@ -38,7 +38,7 @@ var (
 	}
 )
 
-var _ = Describe("cluster health", Label("cluster"), func() {
+var _ = Describe("Cluster health", Label("cluster"), func() {
 	It("requires every node to be schedulable, Ready, and free of resource pressure or network problems", Label("nodes"), func(ctx SpecContext) {
 		nodes := testutil.ClusterNodes
 		Expect(nodes).NotTo(BeEmpty(), "no nodes found")

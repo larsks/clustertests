@@ -29,7 +29,7 @@ var (
 	}
 )
 
-var _ = Describe("ExternalSecretsOperator", Label("secrets"), func() {
+var _ = Describe("External Secrets Operator", Label("secrets"), func() {
 	BeforeEach(func(ctx SpecContext) {
 		testutil.SkipIfResourceKindDoesNotExist(externalSecretGVR)
 	})

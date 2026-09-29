@@ -71,7 +71,7 @@ func componentResource(component string) (schema.GroupVersionResource, bool) {
 	return schema.GroupVersionResource{}, false
 }
 
-var _ = Describe("RedHatOpenShiftAI", Label("rhods"), func() {
+var _ = Describe("Red Hat OpenShift AI", Label("rhods"), func() {
 	BeforeEach(func(ctx SpecContext) {
 		testutil.SkipIfResourceKindDoesNotExist(dataScienceClusterGVR)
 	})

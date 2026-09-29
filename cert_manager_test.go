@@ -57,7 +57,7 @@ var (
 	}
 )
 
-var _ = Describe("CertManager", Label("cert-manager"), func() {
+var _ = Describe("Cert-Manager", Label("cert-manager"), func() {
 	BeforeEach(func(ctx SpecContext) {
 		testutil.SkipIfResourceKindDoesNotExist(certificateGVR)
 	})
