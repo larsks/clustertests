@@ -24,4 +24,8 @@ const (
 	// DefaultPodRestartThreshold is how many times a container may have
 	// restarted before it is reported as flapping (POD_RESTART_THRESHOLD).
 	DefaultPodRestartThreshold = 5
+
+	// DefaultVolumeReleasedTimeout is how long a PersistentVolume may remain
+	// Released before it is reported (VOLUME_RELEASED_TIMEOUT).
+	DefaultVolumeReleasedTimeout = 10 * time.Minute
 )

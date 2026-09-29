@@ -101,6 +101,34 @@ var _ = Describe("cluster health", Label("cluster"), func() {
 		testutil.ExpectNoProblems(problems)
 	})
 
+	// Failed always indicates a problem (e.g. a bad reclaim), so it's reported
+	// immediately. Released is a normal step on the way to reclamation, so a
+	// volume only gets reported once it's been stuck there for a while,
+	// suggesting the reclaim policy or a stuck finalizer is holding it up.
+	It("requires every PersistentVolume to not be Failed or stuck Released", Label("storage"), func(ctx SpecContext) {
+		timeout := testutil.GetEnvWithDefault("VOLUME_RELEASED_TIMEOUT", testutil.DefaultVolumeReleasedTimeout)
+		now := time.Now()
+
+		var problems []string
+		err := testutil.EachItem(ctx, testutil.CoreClient.CoreV1().PersistentVolumes().List, metav1.ListOptions{}, func(volume *corev1.PersistentVolume) error {
+			switch volume.Status.Phase {
+			case corev1.VolumeFailed:
+				problems = append(problems, fmt.Sprintf("%s: phase=Failed: %s", testutil.ObjectID(volume), volume.Status.Message))
+			case corev1.VolumeReleased:
+				if volume.Status.LastPhaseTransitionTime == nil {
+					return nil
+				}
+				if age := now.Sub(volume.Status.LastPhaseTransitionTime.Time); age > timeout {
+					problems = append(problems, fmt.Sprintf("%s: Released for %s", testutil.ObjectID(volume), age.Round(time.Second)))
+				}
+			}
+			return nil
+		})
+		testutil.ExpectNoError(err, "list PersistentVolumes")
+
+		testutil.ExpectNoProblems(problems)
+	})
+
 	It("requires every ClusterOperator to be Available and not Degraded", Label("cluster-operators"), func(ctx SpecContext) {
 		testutil.SkipIfResourceKindDoesNotExist(clusterOperatorGVR)
 

@@ -77,6 +77,7 @@ example `30m`):
 | `TERMINATING_TIMEOUT`       | `10m`   | How long a pod or namespace may remain in the process of being deleted before it is reported |
 | `CHALLENGE_PENDING_TIMEOUT` | `10m`   | How long a cert-manager ACME challenge may be pending before it is reported                  |
 | `POD_RESTART_THRESHOLD`     | `5`     | Restart count at which a recently restarted container is reported                            |
+| `VOLUME_RELEASED_TIMEOUT`   | `10m`   | How long a PersistentVolume may remain Released before it is reported                        |
 
 ## Excluding namespaces
 
